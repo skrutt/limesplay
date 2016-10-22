@@ -38,62 +38,132 @@
 // include the library code:
 #include <LiquidCrystal.h>
 
+#define BUFFER_SIZE 40
+#define REFRESH_WRITES 1500
+#define NOT_CONNECTED_TIMEOUT 1000
+
+#define RED_LED_PIN 10
+#define GREEN_LED_PIN 11
+#define BLUE_LED_PIN 9
+
+#define LED_SINUS_STEPS 300
+#define LED_MAX_BRIGHTNESS 255
+
 // initialize the library with the numbers of the interface pins
 LiquidCrystal lcd(7, 6, 5, 4, 3, 2);
 
-void setup(){
-    // set up the LCD's number of columns and rows: 
+void setup()
+{
+  //Set led pins to putputs
+  pinMode(RED_LED_PIN, OUTPUT); 
+  pinMode(GREEN_LED_PIN, OUTPUT); 
+  pinMode(BLUE_LED_PIN, OUTPUT); 
+  
+  // set up the LCD's number of columns and rows: 
   lcd.begin(20, 2);
   // initialize the serial communications:
   Serial.begin(19200);
 }
 
-#define BUFFER_SIZE 40
-#define REFRESH_WRITES 15
+void screen_reset()
+{
+  static uint16_t screen_refresh = 0;
+  screen_refresh++;
+  if(screen_refresh > REFRESH_WRITES)
+  {
+      //Reset screen if its gone wonky
+      lcd.begin(20, 2);
+      screen_refresh = 0;
+  }
+}
+
+void handle_serial_screen_refresh(int got_char)
+{
+  static int count = 0, screen_refresh = 0;
+  static int buffer[BUFFER_SIZE];
+    
+  if(got_char == 1)
+  {
+      lcd.setCursor(0,0);
+      
+      for(int i = 0; i < 40;i++)
+      {
+          lcd.write(buffer[i]);
+        
+          if(i == 19)
+          {
+              //end of first line! go to next
+              lcd.setCursor(0,1);
+          }
+      }
+      
+      count = 0;  
+  }
+  else
+  {
+      if(count < BUFFER_SIZE)
+      {
+          buffer[count] = got_char; // set into buffer  
+      }
+      count++;
+      
+  } 
+}
+
+void update_leds()
+{
+  static uint8_t test = 0;
+  test++;
+  static uint16_t it_counter = 0;
+  it_counter++;
+  if(it_counter > LED_SINUS_STEPS)
+  {
+    it_counter = 0;
+  }
+  const float addme = PI/LED_SINUS_STEPS;
+  
+  float sinval = sin(addme * it_counter);
+  
+  analogWrite(RED_LED_PIN, sinval * LED_MAX_BRIGHTNESS);
+  analogWrite(BLUE_LED_PIN, sinval * LED_MAX_BRIGHTNESS);
+  
+  lcd.print(sinval);
+  
+}
+
+void handle_standalone_screen_refresh()
+{
+  lcd.setCursor(0,0);
+  lcd.print("Hello world!!");
+  update_leds();
+}
 
 void loop()
-{
-    static int count = 0, screen_refresh = 0;
-    static int buffer[BUFFER_SIZE];
+{    
+    static int not_connected_timeout = 0;
     
-    
-    
+    screen_reset();  //Call periodically to make sure screen is online
+
     // when characters arrive over the serial port...
     int got_char = Serial.read();
     if(got_char > 0)  //Got something, handle
     {
-        if(got_char == 1)
-        {
-            screen_refresh++;
-            if(screen_refresh > REFRESH_WRITES)
-            {
-                //Reset screen if its gone wonky
-                lcd.begin(20, 2);
-                screen_refresh = 0;
-            }else{
-              lcd.setCursor(0,0);
-            }
-            
-            for(int i = 0; i < 40;i++)
-            {
-                lcd.write(buffer[i]);
-              
-                if(i == 19)
-                {
-                    //end of first line! go to next
-                    lcd.setCursor(0,1);
-                }
-            }
-            
-            count = 0;  
-        }else{
-         
-            if(count < BUFFER_SIZE)
-            {
-                buffer[count] = got_char; // set into buffer  
-            }
-            count++;
-            
-        } 
+      handle_serial_screen_refresh(got_char);
+      not_connected_timeout = 0;  //Reset timeout
     }
+    else
+    {
+      //Increment timeout
+      not_connected_timeout++;
+      //This is what we do when we have nothing to do!
+      if(not_connected_timeout > NOT_CONNECTED_TIMEOUT)
+      {
+        handle_standalone_screen_refresh();
+      }
+      delay(1);      
+    }
+    
 }
+
+
+
