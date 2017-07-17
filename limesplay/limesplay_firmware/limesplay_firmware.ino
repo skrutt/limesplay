@@ -1,45 +1,14 @@
-/*
-  LiquidCrystal Library - Serial Input
- 
- Demonstrates the use a 16x2 LCD display.  The LiquidCrystal
- library works with all LCD displays that are compatible with the 
- Hitachi HD44780 driver. There are many of them out there, and you
- can usually tell them by the 16-pin interface.
- 
- This sketch displays text sent over the serial port 
- (e.g. from the Serial Monitor) on an attached LCD.
- 
- The circuit:
- * LCD RS pin to digital pin 12
- * LCD Enable pin to digital pin 11
- * LCD D4 pin to digital pin 5
- * LCD D5 pin to digital pin 4
- * LCD D6 pin to digital pin 3
- * LCD D7 pin to digital pin 2
- * LCD R/W pin to ground
- * 10K resistor:
- * ends to +5V and ground
- * wiper to LCD VO pin (pin 3)
- 
- Library originally added 18 Apr 2008
- by David A. Mellis
- library modified 5 Jul 2009
- by Limor Fried (http://www.ladyada.net)
- example added 9 Jul 2009
- by Tom Igoe 
- modified 22 Nov 2010
- by Tom Igoe
- 
- This example code is in the public domain.
- 
- http://arduino.cc/en/Tutorial/LiquidCrystalSerial
- */
+#include <max6675.h>
 
 // include the library code:
 #include <LiquidCrystal.h>
 
 #define BUFFER_SIZE 40
-#define REFRESH_WRITES 1500
+
+
+#define screenDELAYMS 100
+#define REFRESH_TIMEOUT 15000
+
 #define NOT_CONNECTED_TIMEOUT 1000
 
 #define RED_LED_PIN 10
@@ -49,8 +18,57 @@
 #define LED_SINUS_STEPS 300
 #define LED_MAX_BRIGHTNESS 255
 
+#define thermoCLK 14
+#define thermoCS 15
+#define thermoDO 16
+#define thermoDELAYMS 250
+#define thermoOFFSET 4.5
+#define thermofilterconstant 50
+#define thermofilterconstantLOW (1.0/thermofilterconstant)
+#define thermofilterconstantHIGH (1.0-thermofilterconstantLOW)
+
+typedef struct 
+{
+  uint8_t red;
+  uint8_t green;
+  uint8_t blue;
+} led_color_t;
+
+const led_color_t offline_leds = {.red = 0, .green = 255, .blue = 255};
+const led_color_t online_leds = {.red = 255, .green = 0, .blue = 255};
+static led_color_t current_led_color = {.red = 0, .green = 0, .blue = 255};
+
 // initialize the library with the numbers of the interface pins
 LiquidCrystal lcd(7, 6, 5, 4, 3, 2);
+
+//Thermocouple
+MAX6675 thermocouple(thermoCLK, thermoCS, thermoDO); 
+double current_temp = 20;
+
+
+//Screen reset function
+void screen_reset()
+{
+   //Reset screen if its gone wonky
+   lcd.begin(20, 2);
+   // make a cute degree symbol
+   uint8_t degree[8]  = {140,146,146,140,128,128,128,128};
+   lcd.createChar(0, degree);
+}
+
+//Screen reset with a counter to delay it
+void screen_reset_func()
+{
+  static unsigned long last_reset_time = 0;
+  
+  //Check if time has come to reset again!
+  if(millis() - last_reset_time > REFRESH_TIMEOUT)
+  {
+      last_reset_time = millis();
+    
+      screen_reset();
+  }
+}
 
 void setup()
 {
@@ -59,61 +77,76 @@ void setup()
   pinMode(GREEN_LED_PIN, OUTPUT); 
   pinMode(BLUE_LED_PIN, OUTPUT); 
   
-  // set up the LCD's number of columns and rows: 
-  lcd.begin(20, 2);
+  screen_reset();
+  
   // initialize the serial communications:
   Serial.begin(19200);
 }
 
-void screen_reset()
+void rewrite_screen(int *buffer)
 {
-  static uint16_t screen_refresh = 0;
-  screen_refresh++;
-  if(screen_refresh > REFRESH_WRITES)
+  lcd.setCursor(0,0);
+  
+  for(int i = 0; i < BUFFER_SIZE;i++)
   {
-      //Reset screen if its gone wonky
-      lcd.begin(20, 2);
-      screen_refresh = 0;
+      lcd.write(buffer[i]);
+    
+      if(i == BUFFER_SIZE/2 - 1)
+      {
+          //end of first line! go to next
+          lcd.setCursor(0,1);
+      }
   }
+  
 }
 
-void handle_serial_screen_refresh(int got_char)
+int handle_serial_screen_refresh()
 {
   static int count = 0, screen_refresh = 0;
   static int buffer[BUFFER_SIZE];
-    
-  if(got_char == 1)
+  
+  
+  static uint16_t not_connected_timeout = NOT_CONNECTED_TIMEOUT;
+  
+  // when characters arrive over the serial port...
+  int got_char = Serial.read();
+  while(got_char > 0)  //Got something, handle
   {
-      lcd.setCursor(0,0);
-      
-      for(int i = 0; i < 40;i++)
-      {
-          lcd.write(buffer[i]);
+    if(got_char == 1)
+    {
+        screen_reset_func();  //Call periodically to make sure screen is online
+        rewrite_screen(buffer);
+  
+        not_connected_timeout = 0;  //Reset timeout
+        count = 0;  
+    }
+    else
+    {
+        if(count < BUFFER_SIZE)
+        {
+            buffer[count] = got_char; // set into buffer  
+        }
+        count++;
         
-          if(i == 19)
-          {
-              //end of first line! go to next
-              lcd.setCursor(0,1);
-          }
-      }
-      
-      count = 0;  
+    } 
+    got_char = Serial.read();
   }
-  else
+  //Increment timeout
+  not_connected_timeout++;
+  
+  if(not_connected_timeout > NOT_CONNECTED_TIMEOUT)
   {
-      if(count < BUFFER_SIZE)
-      {
-          buffer[count] = got_char; // set into buffer  
-      }
-      count++;
-      
-  } 
+    return -1;  //We got no data, return fail
+  }
+  
+  current_led_color = online_leds;
+  return 0;
 }
+
+float sinval;
 
 void update_leds()
 {
-  static uint8_t test = 0;
-  test++;
   static uint16_t it_counter = 0;
   it_counter++;
   if(it_counter > LED_SINUS_STEPS)
@@ -122,47 +155,74 @@ void update_leds()
   }
   const float addme = PI/LED_SINUS_STEPS;
   
-  float sinval = sin(addme * it_counter);
+  sinval = sin(addme * it_counter);
   
-  analogWrite(RED_LED_PIN, sinval * LED_MAX_BRIGHTNESS);
-  analogWrite(BLUE_LED_PIN, sinval * LED_MAX_BRIGHTNESS);
+  analogWrite(RED_LED_PIN, sinval * current_led_color.red);
+  analogWrite(GREEN_LED_PIN, sinval * current_led_color.green);
+  analogWrite(BLUE_LED_PIN, sinval * current_led_color.blue);
   
-  lcd.print(sinval);
+}
+void print_temp()
+{
+  lcd.print(current_temp, 1);
+  lcd.write((byte)0);
+  lcd.print("C");
+}
+void handle_standalone_screen_refresh()
+{
+  
+  static unsigned long last_run_time = 0;
+  
+  //Check if time has come to read again!
+  if(millis() - last_run_time > thermoDELAYMS)
+  {
+    last_run_time = millis();
+    
+    screen_reset_func();  //Call periodically to make sure screen is online
+    lcd.setCursor(0,0);
+    lcd.print("Hello world!!               ");
+    
+    lcd.setCursor(0, 1);
+    lcd.print(sinval);
+    lcd.print("          ");
+    print_temp();
+    lcd.print("     ");
+     
+  }
+  
+  current_led_color = offline_leds;
   
 }
 
-void handle_standalone_screen_refresh()
+//Read temp from max6675, taking into account a delay in reading only 4 Hz and LP filtering
+void update_temp()
 {
-  lcd.setCursor(0,0);
-  lcd.print("Hello world!!");
-  update_leds();
+  static unsigned long last_run_time = 0;
+  
+  //Check if time has come to read again!
+  if(millis() - last_run_time > screenDELAYMS)
+  {
+     //lowpassfilter according to constants
+     current_temp = current_temp * thermofilterconstantHIGH + (thermocouple.readCelsius() - thermoOFFSET) * thermofilterconstantLOW;
+     last_run_time = millis();
+  }
 }
 
 void loop()
 {    
-    static int not_connected_timeout = 0;
-    
-    screen_reset();  //Call periodically to make sure screen is online
-
-    // when characters arrive over the serial port...
-    int got_char = Serial.read();
-    if(got_char > 0)  //Got something, handle
+  
+    if(handle_serial_screen_refresh())  //if we get a return value, routine failed
     {
-      handle_serial_screen_refresh(got_char);
-      not_connected_timeout = 0;  //Reset timeout
-    }
-    else
-    {
-      //Increment timeout
-      not_connected_timeout++;
+      
       //This is what we do when we have nothing to do!
-      if(not_connected_timeout > NOT_CONNECTED_TIMEOUT)
-      {
-        handle_standalone_screen_refresh();
-      }
-      delay(1);      
+      handle_standalone_screen_refresh();
     }
     
+    //Call tempreading routine
+    update_leds();
+    update_temp();
+    
+    delay(1);  
 }
 
 
