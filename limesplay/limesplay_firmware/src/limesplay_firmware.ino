@@ -4,6 +4,7 @@
 #include <LiquidCrystal.h>
 
 #include "petprotocol.h"
+#include "Adafruit-GFX-Library-master/Adafruit_GFX.h"
 
 #define BUFFER_SIZE 40
 
@@ -28,6 +29,36 @@
 #define thermofilterconstant 50
 #define thermofilterconstantLOW (1.0/thermofilterconstant)
 #define thermofilterconstantHIGH (1.0-thermofilterconstantLOW)
+
+
+bool screen_buf [5 * 4][2 * 8] = {0};
+uint8_t custom_char_buf[8][8] = {0};
+
+
+class Petter_gfx202 : public Adafruit_GFX {
+public:
+  Petter_gfx202(void) : Adafruit_GFX(5 * 4, 8 * 2)
+  {
+  }
+
+
+
+  void drawPixel(int16_t x, int16_t y, uint16_t color)
+  {
+    if ((x >= 0) && (x < 5 * 4) )
+    {
+        if ((y >= 0) && (y < 8 * 2) )
+        {
+            /* code */
+           screen_buf[x][y] = color > 0;
+        }
+    }
+    
+
+  }
+
+};
+Petter_gfx202 gfx_area;
 
 typedef struct
 {
@@ -58,7 +89,36 @@ bool have_heartbeat = 0;
 //ö already exists
  uint8_t charOE[8]  = {0b10001010, 0b10001110, 0b10010001, 0b10010001, 0b10010001, 0b10010001, 0b10001110, 128};
 
+void update_char_buf()
+{
+    //Char
+    for (size_t i = 0; i < 4; i++)
+    {
+        //Char row
+        for (size_t row = 0; row < 8; row++)
+        {   
+            //Pixel
+            //for (size_t j = 0; j < 5; j++)
+            {
+                custom_char_buf[i][row] = 128 + 
+                                        screen_buf[0 + i * 5][row] * 16 +
+                                        screen_buf[1 + i * 5][row] * 8 +
+                                        screen_buf[2 + i * 5][row] * 4 +
+                                        screen_buf[3 + i * 5][row] * 2 +
+                                        screen_buf[4 + i * 5][row] * 1;
 
+                custom_char_buf[i + 4][row] = 128 + 
+                                        screen_buf[0 + i * 5][row + 8] * 16 +
+                                        screen_buf[1 + i * 5][row + 8] * 8 +
+                                        screen_buf[2 + i * 5][row + 8] * 4 +
+                                        screen_buf[3 + i * 5][row + 8] * 2 +
+                                        screen_buf[4 + i * 5][row + 8] * 1;
+            }
+        }
+        
+    }
+    
+}
 
 //Screen reset function
 void screen_reset()
@@ -67,26 +127,34 @@ void screen_reset()
    lcd.begin(20, 2);
    // make a cute degree symbol
    uint8_t degree[8]  = {140,146,146,140,128,128,128,128};
-   lcd.createChar(0, degree);
-   lcd.createChar(1, charao);
-   lcd.createChar(2, charAO);
-   lcd.createChar(3, charAE);
-   lcd.createChar(4, charOE);
+
+
+   
+//    lcd.createChar(0, degree);
+//    lcd.createChar(1, charao);
+//    lcd.createChar(2, charAO);
+//    lcd.createChar(3, charAE);
+//    lcd.createChar(4, charOE);
    
 }
 
 //Screen reset with a counter to delay it
 void screen_reset_func()
 {
-  static unsigned long last_reset_time = 0;
+    static unsigned long last_reset_time = 0;
+    update_char_buf();
+    for (size_t i = 0; i < 8; i++)
+    {
+        lcd.createChar(i, custom_char_buf[i]);
+    }
 
-  //Check if time has come to reset again!
-  if(millis() - last_reset_time > REFRESH_TIMEOUT)
-  {
-      last_reset_time = millis();
+    //Check if time has come to reset again!
+    if(millis() - last_reset_time > REFRESH_TIMEOUT)
+    {
+        last_reset_time = millis();
 
-      screen_reset();
-  }
+        screen_reset();
+    }
 }
 
 void setup()
@@ -97,6 +165,7 @@ void setup()
   pinMode(BLUE_LED_PIN, OUTPUT);
 
   screen_reset();
+//  gfx_area.begin();
 
   // initialize the serial communications:
   Serial.begin(115200);
@@ -179,13 +248,30 @@ void print_temp()
 static char lcd_str[] = "Hello world me tioo!!               ";
 void handle_standalone_screen_refresh()
 {
+    const int modifier = 5;
+        static uint16_t scrllcnt = 5 * modifier;
 
+        gfx_area.fillRect(0, 0, 20 ,20, 0);
+        gfx_area.drawChar(scrllcnt / modifier, 5, 64, 1, 0, 1);
+        scrllcnt = (scrllcnt + 1 ) % (20  * modifier);
         screen_reset_func();  //Call periodically to make sure screen is online
         lcd.setCursor(0,0);
+
+        const char cconst[8] = {0,1,2,3,4,5,6,7};
+        
+        lcd.write((byte)0);
+        lcd.write((byte)1);
+        lcd.write((byte)2);
+        lcd.write((byte)3);
         lcd.print(lcd_str);
         //Possibly clear screen after here
 
         lcd.setCursor(0, 1);
+                
+        lcd.write((byte)4);
+        lcd.write((byte)5);
+        lcd.write((byte)6);
+        lcd.write((byte)7);
         lcd.print(sinval);
         lcd.print("          ");
         print_temp();  
