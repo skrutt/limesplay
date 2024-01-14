@@ -1,0 +1,62 @@
+//
+// !!! WARNING !!! AUTO-GENERATED FILE!
+// PLEASE DO NOT MODIFY IT AND USE "platformio.ini":
+// https://docs.platformio.org/page/projectconf/section_env_build.html#build-flags
+//
+{
+    "configurations": [
+        {
+            "name": "PlatformIO",
+            "includePath": [
+                "/home/skrutt/Skrivbord/limesplay/limesplay_firmware/include",
+                "/home/skrutt/Skrivbord/limesplay/limesplay_firmware/src",
+                "/home/skrutt/.platformio/lib/MAX6675_ID343/src",
+                "/home/skrutt/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
+                "/home/skrutt/Skrivbord/limesplay/limesplay_firmware/.pio/libdeps/pro16MHzatmega328/LiquidCrystal",
+                "/home/skrutt/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
+                "/home/skrutt/.platformio/packages/framework-arduino-avr/cores/arduino",
+                "/home/skrutt/.platformio/packages/framework-arduino-avr/variants/eightanaloginputs",
+                "/home/skrutt/Skrivbord/limesplay/limesplay_firmware/lib/buf/src",
+                "/home/skrutt/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
+                "/home/skrutt/.platformio/packages/framework-arduino-avr/libraries/HID/src",
+                "/home/skrutt/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src",
+                ""
+            ],
+            "browse": {
+                "limitSymbolsToIncludedHeaders": true,
+                "path": [
+                    "/home/skrutt/Skrivbord/limesplay/limesplay_firmware/include",
+                    "/home/skrutt/Skrivbord/limesplay/limesplay_firmware/src",
+                    "/home/skrutt/.platformio/lib/MAX6675_ID343/src",
+                    "/home/skrutt/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
+                    "/home/skrutt/Skrivbord/limesplay/limesplay_firmware/.pio/libdeps/pro16MHzatmega328/LiquidCrystal",
+                    "/home/skrutt/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
+                    "/home/skrutt/.platformio/packages/framework-arduino-avr/cores/arduino",
+                    "/home/skrutt/.platformio/packages/framework-arduino-avr/variants/eightanaloginputs",
+                    "/home/skrutt/Skrivbord/limesplay/limesplay_firmware/lib/buf/src",
+                    "/home/skrutt/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
+                    "/home/skrutt/.platformio/packages/framework-arduino-avr/libraries/HID/src",
+                    "/home/skrutt/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src",
+                    ""
+                ]
+            },
+            "defines": [
+                "PLATFORMIO=60002",
+                "ARDUINO_AVR_PRO",
+                "F_CPU=16000000L",
+                "ARDUINO_ARCH_AVR",
+                "ARDUINO=10808",
+                "__AVR_ATmega328P__",
+                ""
+            ],
+            "cStandard": "c11",
+            "cppStandard": "c++11",
+            "compilerPath": "/home/skrutt/.platformio/packages/toolchain-atmelavr/bin/avr-gcc",
+            "compilerArgs": [
+                "-mmcu=atmega328p",
+                ""
+            ]
+        }
+    ],
+    "version": 4
+}
