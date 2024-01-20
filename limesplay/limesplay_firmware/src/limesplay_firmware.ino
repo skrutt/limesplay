@@ -126,7 +126,7 @@ void screen_reset()
    //Reset screen if its gone wonky
    lcd.begin(20, 2);
    // make a cute degree symbol
-   uint8_t degree[8]  = {140,146,146,140,128,128,128,128};
+   //uint8_t degree[8]  = {140,146,146,140,128,128,128,128};
 
 
    
@@ -203,7 +203,7 @@ void update_lcd_buffer(uint8_t * text, uint8_t len)
 
 int handle_serial_screen_refresh()
 {
-        static int count = 0;
+        //static int count = 0;
 
         screen_reset_func();  //Call periodically to make sure screen is online
         rewrite_screen(lcd_buffer);
@@ -245,19 +245,36 @@ void print_temp()
       lcd.write((byte)0);
       lcd.print("C");
 }
-static char lcd_str[] = "Hello world me tioo!!               ";
+
+#include "cord.h"
+
+static char lcd_str[] = "Hello world!!               ";
 void handle_standalone_screen_refresh()
 {
     const int modifier = 5;
         static uint16_t scrllcnt = 5 * modifier;
 
+        //Clear area
         gfx_area.fillRect(0, 0, 20 ,20, 0);
-        gfx_area.drawChar(scrllcnt / modifier, 5, 64, 1, 0, 1);
-        scrllcnt = (scrllcnt + 1 ) % (20  * modifier);
+
+        //static point pnt(0,19 - 4,0,15 - 6);
+        static star str(4);
+
+        //gfx_area.drawChar(pnt.getx(), pnt.gety(), 1, 1, 0, 1);
+        str.draw(&gfx_area);
+
+        //if (!(scrllcnt % 2))
+        {
+            //pnt.update();   
+            str.update();
+        }
+        
+
+        scrllcnt++;
         screen_reset_func();  //Call periodically to make sure screen is online
         lcd.setCursor(0,0);
 
-        const char cconst[8] = {0,1,2,3,4,5,6,7};
+        //const char cconst[8] = {0,1,2,3,4,5,6,7};
         
         lcd.write((byte)0);
         lcd.write((byte)1);
@@ -273,7 +290,7 @@ void handle_standalone_screen_refresh()
         lcd.write((byte)6);
         lcd.write((byte)7);
         lcd.print(sinval);
-        lcd.print("          ");
+        lcd.print("        ");
         print_temp();  
         lcd.print("     ");
 
