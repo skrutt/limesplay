@@ -142,3 +142,31 @@ The first payload byte selects the message:
 Receiving any valid packet also resets the firmware's heartbeat timer, which
 switches the display from standalone (animation) mode to online (host stats)
 mode.
+
+## Virtual serial port (example application)
+
+Because petcol hands back everything that *isn't* a packet, it can power a
+transparent bridge on the host: a small tool owns the real serial port
+(`/dev/ttyUSB0`) and exposes a **virtual port** (a pty, e.g. `/tmp/ttyLIME`).
+It decodes petcol packets for your application and forwards every other byte to
+the virtual port. Point the Arduino Serial Monitor at the virtual port and it
+sees only the human-readable debug output, while structured data is filtered out
+on the side — no second UART, no escaping, no broken framing.
+
+![A bridge owns the real port and exposes a virtual one: petcol packets go to your app, plain debug goes to the Serial Monitor over /tmp/ttyLIME](docs/petcol-virtual-port.svg)
+
+Scope worth knowing up front:
+
+- **Monitoring is fully transparent**, including *reset-on-open*: the monitor
+  toggles DTR/RTS on the virtual port, the bridge reads those modem lines and
+  mirrors them onto the real port, so the board resets when you open the monitor
+  exactly as it does today.
+- **Uploads bypass the bridge.** `avrdude` pulses DTR and then speaks STK500 to
+  the bootloader with tight timing and wants exclusive access to the port, so
+  routing an upload through a pty hop is fragile. The clean answer is to release
+  the real port for uploads (or upload to it directly) and re-attach afterwards,
+  which keeps "edit → upload → monitor" working without emulating the bootloader.
+
+This is a planned host tool, not yet implemented; it needs the host-side petcol
+decoder (the mirror of the firmware's `recv_byte_input`) that `petcol.py` will
+grow.
