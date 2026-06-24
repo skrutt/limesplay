@@ -55,13 +55,6 @@ A packet is sent as:
 
 ![petcol frame layout: payload, then crc32 (u32 LE), length (u16 LE) and the delimiter byte](docs/petcol-frame.svg)
 
-```
-+-----------------+--------------+--------------+-----------+
-| payload (N)     | crc32 (u32)  | length (u16) | 0xAA      |
-+-----------------+--------------+--------------+-----------+
-  N bytes           4 bytes LE     2 bytes LE     1 byte
-```
-
 | Field     | Size | Encoding | Notes                                            |
 |-----------|------|----------|--------------------------------------------------|
 | `payload` | N    | raw      | Application bytes. `payload[0]` is the message type. |
