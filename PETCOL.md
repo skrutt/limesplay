@@ -1,7 +1,7 @@
 # petcol protocol
 
-`petcol` is the small serial protocol the host tool (`limesplay/petcol.py`) uses
-to talk to the firmware (`limesplay/limesplay_firmware/src/petprotocol.cpp`).
+`petcol` is the small serial protocol the host tool (`host/petcol.py`) uses
+to talk to the firmware (`limesplay_firmware/petprotocol.cpp`).
 It frames arbitrary byte payloads, protects them with a CRC-32, and uses a
 trailing sentinel byte so the receiver can find packet boundaries in a stream.
 
