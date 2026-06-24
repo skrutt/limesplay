@@ -7,12 +7,12 @@ See firmware for hardware setup, its pretty straight forward
 
 The host and firmware talk over **petcol**: a tiny self-synchronising framing
 layer that wraps arbitrary payloads in a CRC-32 and a trailing delimiter. The
-point is that it *gets out of your way* — structured packets and ordinary
-`Serial.print` debugging can share a single link, and a stray delimiter inside
-your data can't break framing because the CRC has to match too. Full spec in
-[PETCOL.md](PETCOL.md).
+point is that it *gets out of your way* — it carries packets over an arbitrary
+byte stream and hands back anything that isn't a packet, so framed data can
+coexist with other traffic, and a stray delimiter inside your data can't break
+framing because the CRC has to match too. Full spec in [PETCOL.md](PETCOL.md).
 
-![petcol: one wire carries framed packets and plain debug text; the receiver splits them apart](docs/petcol-coexist.svg)
+![petcol: one stream carries framed packets alongside other bytes; the receiver pulls the packets out and hands back the rest](docs/petcol-coexist.svg)
 
 ## Repository layout
 

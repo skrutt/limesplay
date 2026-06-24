@@ -5,12 +5,16 @@ to talk to the firmware (`limesplay_firmware/petprotocol.cpp`).
 It frames arbitrary byte payloads, protects them with a CRC-32, and uses a
 trailing sentinel byte so the receiver can find packet boundaries in a stream.
 
-The whole point is to stay out of the way: a petcol channel can share a serial
-line with ordinary `Serial.print` debugging. Bytes that aren't part of a packet
-are handed straight back to you, so you keep using the Arduino Serial Monitor as
-usual while structured data is pulled out on the side.
+The whole point is to stay out of the way. petcol carries structured packets
+over an arbitrary byte stream and hands every byte that *isn't* part of a packet
+straight back to you, so framed data can coexist with other traffic on the same
+stream without either side corrupting the other. That makes things like mixing
+human-readable debug output in with packets possible — though actually consuming
+that non-packet side (for example presenting it as a plain serial console) needs
+some host-side plumbing that this project does not provide yet (see the virtual
+serial port below).
 
-![One serial link carries framed packets and plain debug text; petcol verifies the CRC and splits packets from leftover bytes](docs/petcol-coexist.svg)
+![One byte stream carries framed packets alongside other bytes; petcol verifies the CRC, returns the packets and hands back everything else](docs/petcol-coexist.svg)
 
 ## Model and API (firmware)
 
