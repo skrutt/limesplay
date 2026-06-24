@@ -101,12 +101,7 @@ def render(count, preferred_iface=None):
 
 def find_port():
     """Best-effort auto-detection of the serial port."""
-    try:
-        from serial.tools import list_ports
-        ports = [p.device for p in list_ports.comports()]
-    except Exception:
-        ports = []
-    ports += sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*"))
+    ports = sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*"))
     seen = []
     for p in ports:
         if p not in seen:
