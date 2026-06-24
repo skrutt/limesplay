@@ -15,6 +15,7 @@ Examples::
 
 import argparse
 import glob
+import socket
 import sys
 import time
 from datetime import datetime
@@ -76,7 +77,7 @@ def get_ip(preferred=None):
 
     for iface in order:
         for snic in addrs.get(iface, ()):
-            if snic.family == psutil.AF_INET and not snic.address.startswith("127."):
+            if snic.family == socket.AF_INET and not snic.address.startswith("127."):
                 return snic.address
     return "no_ip"
 
