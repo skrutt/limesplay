@@ -5,26 +5,14 @@
 
 //Let's go with a fixed packetsize for the first low spec iteration
 #define PACKETSIZE_MAX  128
-#define PETCOL_BYTE     0xAA    //0b1010101010
+#define PETCOL_BYTE     0xAA    //0b10101010
+#define RECV_BUFSIZE    256     //ring buffer for the receive stream
 
-
-typedef struct {
-    // uint32_t  type;
-    uint32_t  CRC;
-    uint16_t  length;
-} packet_header;
-
-//Not sure if we actually need the packet?
+//A decoded packet handed back to the caller.
 typedef struct {
     uint16_t length;
-#ifdef PACKETSIZE_MAX
     uint8_t data[PACKETSIZE_MAX];
-#else
-    void * data;
-#endif
 } packet_recieved;
-
-#define SENDSIZE_MAX PACKETSIZE_MAX + sizeof(packet_header)
 
 // petcol: a self-synchronising framing layer over an arbitrary byte transport.
 //
@@ -60,10 +48,9 @@ public:
 private:
     void(*send_data_callback)(const void*, uint16_t size);
     uint8_t delimiter;          //Frame terminator for this instance (defaults to PETCOL_BYTE)
-    // uint8_t send_buf[SENDSIZE_MAX];
     packet_recieved recv_packet;
-    MyBuffer <uint8_t>recv_ring_buf;
-    void (*extra_data_callback)(uint8_t byte);
+    MyBuffer<uint8_t, RECV_BUFSIZE> recv_ring_buf;
+    void (*extra_data_callback)(uint8_t byte) = nullptr;
 
     uint32_t make_CRC(const void * data, uint16_t len);
 

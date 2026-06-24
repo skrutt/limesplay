@@ -312,21 +312,6 @@ void update_temp()
       }
 }
 
-MyBuffer<uint8_t> buf(200);
-
-void sendFunc(const void * data, uint16_t length)
-{
-        // Serial.print("putting data into buf: ");
-        uint8_t* ptr = (uint8_t*)data;
-        for (uint8_t i = 0; i < length; i++)
-        {
-            buf.put(ptr[i]);
-            // Serial.print(ptr[i]);
-            // Serial.print(" ");
-        }
-        // Serial.println(" ");
-}
-
 void printfunc(uint8_t byte)
 {
         Serial.write(byte);
@@ -353,27 +338,12 @@ void handle_serial_conn()
         if((millis() - last_run_time) > 150)
         {
           last_run_time = millis();
-            // Serial.write("Sending packets\n");
-            // const char data[] = "Now we are sendi\xA\0\xAA some real data \n";
-            // static uint8_t num = 1;
-            // num %= sizeof(data);
-            // num++;
-            //
-            // const char data1[] = " \n HEY! \n And this is some distractions! \n\n";
-
-            // sendFunc(data1, sizeof(data1) - 1);
-            // test.sendFunc(data, num);
 
             com_float_type_t temp_msg;
             temp_msg.type = 1;
             temp_msg.value = current_temp;
             test.sendFunc(&temp_msg, 6);
         }
-
-            // if (Serial.available())
-            // {
-            //     Serial.write("We got data!");
-            // }
 
     #define HEARTBEAT_TIMEOUT 5000
 
@@ -411,50 +381,6 @@ void handle_serial_conn()
 
 void loop()
 {
-
-    // if (buf.available())
-    {
-        // packet_recieved *gotpac;
-        // while(buf.available())
-        // {
-        //     uint8_t byte = buf.get();
-        //     if(gotpac = test.recv_byte_input(byte))
-        //     {
-        //         Serial.write("Looks good! we got a packet!\n");
-        //         if(gotpac->length == 1)
-        //             Serial.print(*gotpac->data);
-        //         else
-        //             Serial.write((char*)gotpac->data, gotpac->length);
-        //     }
-        //     // else
-        //     // {
-        //     //     Serial.print(byte);
-        //     //     Serial.print(" ");
-        //     // }
-        //
-        //
-        // }
-        // if(!gotpac)
-        // {
-        //     Serial.write(" No packet yet!\n");
-        //
-        //     delay(5000);
-        // }
-    }
-    // else
-
-        // // const char TEST[] = "\n TEST\n\n";
-        // //
-        // // Serial.write(TEST, sizeof(TEST));
-        // Serial.print("size of temp_msg ");
-        // Serial.println(sizeof(temp_msg));
-        //
-        //
-        // // sendFunc(data, sizeof(data) - 1);
-        // test.sendFunc(data1, sizeof(data1) - 1);
-        // test.sendFunc(&num, sizeof(num));
-        // Serial.println(num);
-    // }
     handle_serial_conn();
 
     static unsigned long last_run_time = 0;
