@@ -52,7 +52,7 @@ class petcol
 {
 public:
     //Construct from a transport struct.
-    petcol(pet_TL, uint8_t delimiter = PETCOL_BYTE );
+    //petcol(pet_TL, uint8_t delimiter = PETCOL_BYTE );
     //recvfunc is currently unused; kept for source compatibility.
     petcol(void(*sendfunc)(const void*, uint16_t ), bool(*recvfunc)(uint8_t*), uint8_t delimiter = PETCOL_BYTE);
     //Minimal: send only.
@@ -69,7 +69,7 @@ public:
     packet_recieved *recv_byte_input(uint8_t byte);
 
 private:
-    pet_TL TL;
+    void(*send_data_callback)(const void*, uint16_t size);
     uint8_t delimiter;          //Frame terminator for this instance (defaults to PETCOL_BYTE)
     // uint8_t send_buf[SENDSIZE_MAX];
     packet_recieved recv_packet;

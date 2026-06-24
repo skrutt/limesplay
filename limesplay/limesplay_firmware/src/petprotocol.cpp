@@ -2,15 +2,9 @@
 #include "petprotocol.h"
 
 //Constructor
-petcol::petcol(pet_TL TL, uint8_t delimiter)
-{
-    this->TL = TL;
-    this->delimiter = delimiter;
-}
-//Constructor
 petcol::petcol(void(*sendfunc)(const void*, uint16_t ), uint8_t delimiter)
 {
-    this->TL.sendfunc = sendfunc;
+    this->send_data_callback = sendfunc;
     this->delimiter = delimiter;
 }
 //Constructor
@@ -57,13 +51,13 @@ bool petcol::sendFunc(const void * data, uint16_t len)
     send_header.length = len;
 
     //Send data
-    TL.sendfunc(data, len);
+    send_data_callback(data, len);
 
-    TL.sendfunc(&send_header, sizeof(send_header));
+    send_data_callback(&send_header, sizeof(send_header));
 
     uint8_t endbyte;
     endbyte = delimiter;
-    TL.sendfunc(&endbyte, 1);
+    send_data_callback(&endbyte, 1);
 
     return true;
 }
