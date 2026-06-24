@@ -23,26 +23,23 @@ petcol::~petcol()
 }
 
 //CRC, heart of packet verification
+//Standard CRC-32 (IEEE 802.3 / zlib), reflected, poly 0xEDB88320. Bitwise so
+//no lookup table is kept in flash. Computed over the payload bytes only.
 uint32_t petcol::make_CRC(const void * data, uint16_t len)
 {
-    uint32_t result = 0;
-    uint8_t * ptr = (uint8_t *)&result;
+    const uint8_t * ptr = (const uint8_t *)data;
+    uint32_t crc = 0xFFFFFFFFUL;
 
-    //Loop and add all data
-    uint16_t i = 0;
-    for(; i < len; i++)
+    for(uint16_t i = 0; i < len; i++)
     {
-        ptr[i%4] += ((uint8_t*)data)[i];
+        crc ^= ptr[i];
+        for(uint8_t bit = 0; bit < 8; bit++)
+        {
+            crc = (crc >> 1) ^ (0xEDB88320UL & (-(crc & 1)));
+        }
     }
 
-    //Now do len
-    uint8_t * lenptr = (uint8_t*)&len;
-
-    ptr[i%4] += lenptr[0];
-    i++;
-    ptr[i%4] += lenptr[1];
-
-    return result;
+    return crc ^ 0xFFFFFFFFUL;
 }
 // Send data in a packet
 bool petcol::sendFunc(const void * data, uint16_t len)
