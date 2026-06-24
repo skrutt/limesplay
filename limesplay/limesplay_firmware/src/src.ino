@@ -4,7 +4,7 @@
 #include <LiquidCrystal.h>
 
 #include "petprotocol.h"
-#include "Adafruit-GFX-Library-master/Adafruit_GFX.h"
+#include <Adafruit_GFX.h>
 
 #define BUFFER_SIZE 40
 

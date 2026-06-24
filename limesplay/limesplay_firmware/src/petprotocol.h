@@ -1,7 +1,7 @@
 #ifndef PETCOL_H
 #define PETCOL_H
 #include <stdint.h>
-#include <buf.h>
+#include "buf.h"
 
 //Let's go with a fixed packetsize for the first low spec iteration
 #define PACKETSIZE_MAX  128

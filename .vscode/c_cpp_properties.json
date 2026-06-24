@@ -1,0 +1,35 @@
+{
+  "version": 4,
+  "configurations": [
+    {
+      "name": "Arduino",
+      "includePath": [
+        "/home/skrutt/.arduino15/packages/arduino/hardware/avr/1.8.8/cores/arduino",
+        "/home/skrutt/.arduino15/packages/arduino/hardware/avr/1.8.8/variants/eightanaloginputs",
+        "/home/skrutt/Arduino/libraries/MAX6675_library",
+        "/home/skrutt/Arduino/libraries/LiquidCrystal/src",
+        "/home/skrutt/Arduino/libraries/Adafruit_GFX_Library",
+        "/home/skrutt/Arduino/libraries/Adafruit_BusIO",
+        "/home/skrutt/.arduino15/packages/arduino/hardware/avr/1.8.8/libraries/Wire/src",
+        "/home/skrutt/.arduino15/packages/arduino/hardware/avr/1.8.8/libraries/SPI/src",
+        "/home/skrutt/Arduino/libraries/Vector/src",
+        "${workspaceFolder}/**"
+      ],
+      "defines": [
+        "F_CPU=16000000L",
+        "ARDUINO=10607",
+        "ARDUINO_AVR_PRO",
+        "ARDUINO_ARCH_AVR"
+      ],
+      "compilerPath": "/home/skrutt/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-g++",
+      "cStandard": "gnu11",
+      "cppStandard": "gnu++11",
+      "compilerArgs": [
+        "-mmcu=atmega328p"
+      ],
+      "forcedInclude": [
+        "/home/skrutt/.arduino15/packages/arduino/hardware/avr/1.8.8/cores/arduino/Arduino.h"
+      ]
+    }
+  ]
+}
