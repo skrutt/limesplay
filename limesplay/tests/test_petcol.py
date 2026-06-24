@@ -44,6 +44,18 @@ class EncodeTests(unittest.TestCase):
         self.assertEqual(crc, petcol_checksum(payload))
         self.assertEqual(packet[-1], PETCOL_BYTE)
 
+    def test_custom_delimiter(self):
+        payload = b"\x01Hello"
+        packet = encode_packet(payload, delimiter=0x55)
+        self.assertEqual(packet[-1], 0x55)
+        # default is unchanged
+        self.assertEqual(encode_packet(payload)[-1], PETCOL_BYTE)
+
+    def test_client_uses_delimiter(self):
+        rec = _Recorder()
+        PetcolClient(rec, delimiter=0x55).send_text("hi")
+        self.assertEqual(rec.chunks[0][-1], 0x55)
+
     def test_known_crc32_vector(self):
         # Canonical CRC-32 check value for the ASCII string "123456789".
         self.assertEqual(petcol_checksum(b"123456789"), 0xCBF43926)

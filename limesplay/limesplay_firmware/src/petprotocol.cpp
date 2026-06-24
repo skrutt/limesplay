@@ -2,18 +2,20 @@
 #include "petprotocol.h"
 
 //Constructor
-petcol::petcol(pet_TL TL)
+petcol::petcol(pet_TL TL, uint8_t delimiter)
 {
     this->TL = TL;
+    this->delimiter = delimiter;
 }
 //Constructor
-petcol::petcol(void(*sendfunc)(const void*, uint16_t ))
+petcol::petcol(void(*sendfunc)(const void*, uint16_t ), uint8_t delimiter)
 {
     this->TL.sendfunc = sendfunc;
+    this->delimiter = delimiter;
 }
 //Constructor
-petcol::petcol(void(*sendfunc)(const void*, uint16_t ), void (*extra_data_callback)(uint8_t)):
-    petcol(sendfunc)
+petcol::petcol(void(*sendfunc)(const void*, uint16_t ), void (*extra_data_callback)(uint8_t), uint8_t delimiter):
+    petcol(sendfunc, delimiter)
 {
     this->extra_data_callback = extra_data_callback;
 }
@@ -60,7 +62,7 @@ bool petcol::sendFunc(const void * data, uint16_t len)
     TL.sendfunc(&send_header, sizeof(send_header));
 
     uint8_t endbyte;
-    endbyte = PETCOL_BYTE;
+    endbyte = delimiter;
     TL.sendfunc(&endbyte, 1);
 
     return true;
@@ -81,7 +83,7 @@ bool petcol::sendFunc(const void * data, uint16_t len)
 packet_recieved *petcol::recv_byte_input(uint8_t byte)
 {
 
-    if ( (byte == PETCOL_BYTE) && ((sizeof(packet_header) + 1) <= recv_ring_buf.sizeavailable()) )
+    if ( (byte == delimiter) && ((sizeof(packet_header) + 1) <= recv_ring_buf.sizeavailable()) )
     {
         //We found a closebyte, check if this is a valid packet!
         packet_header header;
