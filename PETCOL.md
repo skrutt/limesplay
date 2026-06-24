@@ -1,18 +1,21 @@
 # petcol protocol
 
-`petcol` is the small serial protocol the host tool (`host/petcol.py`) uses
-to talk to the firmware (`limesplay_firmware/petprotocol.cpp`).
-It frames arbitrary byte payloads, protects them with a CRC-32, and uses a
-trailing sentinel byte so the receiver can find packet boundaries in a stream.
+`petcol` is a small framing protocol for an arbitrary byte stream. The canonical
+implementation lives in `petcol/` — `petprotocol.{h,cpp}` for C/C++ and
+`petcol.py` for Python — and is shared by the firmware, the host tool, and the
+examples. It frames arbitrary byte payloads, protects them with a CRC-32, and
+uses a trailing sentinel byte so the receiver can find packet boundaries in a
+stream.
 
 The whole point is to stay out of the way. petcol carries structured packets
 over an arbitrary byte stream and hands every byte that *isn't* part of a packet
 straight back to you, so framed data can coexist with other traffic on the same
 stream without either side corrupting the other. That makes things like mixing
-human-readable debug output in with packets possible — though actually consuming
-that non-packet side (for example presenting it as a plain serial console) needs
-some host-side plumbing that this project does not provide yet (see the virtual
-serial port below).
+human-readable debug output in with packets possible. Pulling that non-packet
+side back out (for example presenting it as a plain serial console) needs a
+host-side decoder — which `petcol/petcol.py` now provides; the live stream
+splitter (see the README) does exactly this, and it is the core piece the
+planned virtual serial port below would build on.
 
 ![One byte stream carries framed packets alongside other bytes; petcol verifies the CRC, returns the packets and hands back everything else](docs/petcol-coexist.svg)
 

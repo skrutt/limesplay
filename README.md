@@ -17,10 +17,16 @@ framing because the CRC has to match too. Full spec in [PETCOL.md](PETCOL.md).
 ## Repository layout
 
 ```
+petcol/                petcol protocol — canonical implementation (C/C++ + Python)
 host/                  Python 3 host tool (sends stats to the LCD over serial)
 limesplay_firmware/    Arduino sketch (open this folder in the Arduino IDE/CLI)
+examples/              worked examples (e.g. a Qt desktop LCD controller)
 PETCOL.md              petcol protocol specification
 ```
+
+petcol has one canonical source in `petcol/` (`petprotocol.{h,cpp}`, `buf.h`,
+`petcol.py`); the firmware and host tool reference it via symlinks and the Qt
+example via its `.pro`, so there is a single implementation to keep in sync.
 
 ## Host tool (Python 3)
 
@@ -67,6 +73,21 @@ python3 petcol_split.py --port /dev/ttyUSB0     # a real board
 ```
 
 ![petcol_split.py: a mixed stream split live into a serial-traffic pane and a decoded-packets pane](docs/petcol-split-demo.webp)
+
+## Examples
+
+- **`host/petcol_split.py`** — the live stream splitter above (Python, curses).
+- **`examples/qt-lcd-controller/`** — a Qt 5 desktop app that drives the LCD
+  over serial: type the two display lines (or mirror the focused window title),
+  pick the RGB backlight with sliders, and read the board's temperature. It uses
+  the canonical petcol for both sending packets and decoding replies. Build it
+  with `qmake && make` (needs `qtbase5-dev` and `libqt5serialport5-dev`):
+
+  ```sh
+  cd examples/qt-lcd-controller
+  qmake && make
+  ./petcol_test
+  ```
 
 ## Firmware (Arduino)
 
