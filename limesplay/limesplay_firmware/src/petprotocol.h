@@ -34,10 +34,10 @@ typedef struct {
 class petcol
 {
 public:
-    petcol(pet_TL );
-    petcol(void(*sendfunc)(const void*, uint16_t ), bool(*recvfunc)(uint8_t*));
-    petcol(void(*sendfunc)(const void*, uint16_t ));
-    petcol(void(*sendfunc)(const void*, uint16_t ), void (*extra_data_callback)(uint8_t) );
+    petcol(pet_TL, uint8_t delimiter = PETCOL_BYTE );
+    petcol(void(*sendfunc)(const void*, uint16_t ), bool(*recvfunc)(uint8_t*), uint8_t delimiter = PETCOL_BYTE);
+    petcol(void(*sendfunc)(const void*, uint16_t ), uint8_t delimiter = PETCOL_BYTE);
+    petcol(void(*sendfunc)(const void*, uint16_t ), void (*extra_data_callback)(uint8_t), uint8_t delimiter = PETCOL_BYTE );
     ~petcol();
 
     bool sendFunc(const void * data, uint16_t len);
@@ -46,6 +46,7 @@ public:
 
 private:
     pet_TL TL;
+    uint8_t delimiter;          //Frame terminator for this instance (defaults to PETCOL_BYTE)
     // uint8_t send_buf[SENDSIZE_MAX];
     packet_recieved recv_packet;
     MyBuffer <uint8_t>recv_ring_buf;

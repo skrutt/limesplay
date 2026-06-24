@@ -21,7 +21,7 @@ A packet is sent as:
 | `payload` | N    | raw      | Application bytes. `payload[0]` is the message type. |
 | `crc32`   | 4    | u32 LE   | CRC-32 of the `payload` bytes (see below).        |
 | `length`  | 2    | u16 LE   | `N`, the payload length.                           |
-| `0xAA`    | 1    | byte     | `PETCOL_BYTE` frame terminator.                   |
+| `0xAA`    | 1    | byte     | Frame terminator. Per-instance (see below); defaults to `PETCOL_BYTE`. |
 
 `N` must satisfy `1 <= N < PACKETSIZE_MAX` (128). The header struct on the
 firmware (`packet_header { uint32_t CRC; uint16_t length; }`) is 6 bytes on AVR
@@ -54,6 +54,28 @@ reads the stored `crc32` and the payload, recomputes the CRC over the payload,
 and only accepts the packet if the two match. On a mismatch the bytes are
 restored to the buffer and scanning continues, so a stray `0xAA` inside data
 does not corrupt framing.
+
+## Delimiter (per instance)
+
+The frame terminator is configurable per `petcol` instance via the constructor,
+falling back to the `PETCOL_BYTE` (`0xAA`) `#define`:
+
+```cpp
+petcol stats(sendfunc);          // delimiter = 0xAA (default)
+petcol debug(sendfunc, 0x00);    // separate channel, delimiter = 0x00
+```
+
+The Python client mirrors this:
+
+```python
+PetcolClient(transport, delimiter=0x00)
+encode_packet(payload, delimiter=0x00)
+```
+
+Sender and receiver must agree on the delimiter. Distinct delimiters let
+multiple petcol instances share one serial link as independent channels (e.g.
+one for application packets and one for piped-through debug output via the
+extra-data callback).
 
 ## Message types
 

@@ -43,8 +43,12 @@ def petcol_checksum(payload):
     return zlib.crc32(bytes(payload)) & 0xFFFFFFFF
 
 
-def encode_packet(payload, checksum=petcol_checksum):
-    """Frame ``payload`` into a complete petcol packet (``bytes``)."""
+def encode_packet(payload, checksum=petcol_checksum, delimiter=PETCOL_BYTE):
+    """Frame ``payload`` into a complete petcol packet (``bytes``).
+
+    ``delimiter`` is the frame terminator byte; it must match the instance the
+    receiving firmware was constructed with (defaults to ``PETCOL_BYTE``).
+    """
     payload = bytes(payload)
     if not payload:
         raise ValueError("petcol payload must be non-empty")
@@ -53,7 +57,7 @@ def encode_packet(payload, checksum=petcol_checksum):
             "petcol payload too large: %d (max %d)" % (len(payload), PACKETSIZE_MAX - 1)
         )
     header = struct.pack("<IH", checksum(payload) & 0xFFFFFFFF, len(payload))
-    return payload + header + bytes((PETCOL_BYTE,))
+    return payload + header + bytes((delimiter & 0xFF,))
 
 
 class PetcolClient:
@@ -61,15 +65,19 @@ class PetcolClient:
 
     ``transport`` only needs a ``write(data: bytes)`` method, which keeps the
     client testable and lets it run against a fake sink in ``--no-serial`` mode.
+
+    A non-default ``delimiter`` must match the delimiter the receiving firmware
+    instance was constructed with.
     """
 
-    def __init__(self, transport, checksum=petcol_checksum):
+    def __init__(self, transport, checksum=petcol_checksum, delimiter=PETCOL_BYTE):
         self._transport = transport
         self._checksum = checksum
+        self._delimiter = delimiter
 
     def send(self, payload):
         """Encode ``payload`` and write the resulting packet to the transport."""
-        packet = encode_packet(payload, self._checksum)
+        packet = encode_packet(payload, self._checksum, self._delimiter)
         self._transport.write(packet)
         return packet
 
