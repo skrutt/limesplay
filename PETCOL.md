@@ -5,6 +5,17 @@ to talk to the firmware (`limesplay_firmware/petprotocol.cpp`).
 It frames arbitrary byte payloads, protects them with a CRC-32, and uses a
 trailing sentinel byte so the receiver can find packet boundaries in a stream.
 
+The whole point is to stay out of the way. petcol carries structured packets
+over an arbitrary byte stream and hands every byte that *isn't* part of a packet
+straight back to you, so framed data can coexist with other traffic on the same
+stream without either side corrupting the other. That makes things like mixing
+human-readable debug output in with packets possible — though actually consuming
+that non-packet side (for example presenting it as a plain serial console) needs
+some host-side plumbing that this project does not provide yet (see the virtual
+serial port below).
+
+![One byte stream carries framed packets alongside other bytes; petcol verifies the CRC, returns the packets and hands back everything else](docs/petcol-coexist.svg)
+
 ## Model and API (firmware)
 
 A `petcol` instance does **not** own the serial link — you hand it a function
@@ -46,12 +57,7 @@ while (Serial.available()) {
 
 A packet is sent as:
 
-```
-+-----------------+--------------+--------------+-----------+
-| payload (N)     | crc32 (u32)  | length (u16) | 0xAA      |
-+-----------------+--------------+--------------+-----------+
-  N bytes           4 bytes LE     2 bytes LE     1 byte
-```
+![petcol frame layout: payload, then crc32 (u32 LE), length (u16 LE) and the delimiter byte](docs/petcol-frame.svg)
 
 | Field     | Size | Encoding | Notes                                            |
 |-----------|------|----------|--------------------------------------------------|
@@ -60,10 +66,10 @@ A packet is sent as:
 | `length`  | 2    | u16 LE   | `N`, the payload length.                           |
 | `0xAA`    | 1    | byte     | Frame terminator. Per-instance (see below); defaults to `PETCOL_BYTE`. |
 
-`N` must satisfy `1 <= N < PACKETSIZE_MAX` (128). The header struct on the
-firmware (`packet_header { uint32_t CRC; uint16_t length; }`) is 6 bytes on AVR
-(1-byte alignment), so the on-wire trailer after the payload is exactly
-`4 + 2 + 1 = 7` bytes.
+`N` must satisfy `1 <= N < PACKETSIZE_MAX` (128). The trailer after the payload
+is exactly `4 + 2 + 1 = 7` bytes. The firmware serialises the CRC and length
+byte by byte (little-endian) rather than copying a struct, so the wire format
+never depends on struct padding or alignment.
 
 ## CRC-32
 
@@ -79,18 +85,23 @@ Check value: CRC-32 of the ASCII string `"123456789"` is `0xCBF43926`.
 
 The firmware implements it bitwise in `petcol::make_CRC`; the host uses
 `zlib.crc32`. Both are byte-for-byte identical, and the test
-`limesplay/tests/test_petcol.py` compiles a verbatim copy of the firmware
+`host/tests/test_petcol.py` compiles a verbatim copy of the firmware
 routine (`crc_reference.c`) and asserts the two agree.
 
 ## Receiving
 
-The firmware feeds every incoming byte to `recv_byte_input()`, which appends to
-a ring buffer. When it sees `0xAA` and enough bytes are buffered, it reads the
-`length`, sanity-checks it (`length < PACKETSIZE_MAX` and enough bytes present),
-reads the stored `crc32` and the payload, recomputes the CRC over the payload,
-and only accepts the packet if the two match. On a mismatch the bytes are
-restored to the buffer and scanning continues, so a stray `0xAA` inside data
-does not corrupt framing.
+Receiving is pull-by-feeding: hand every incoming byte to `recv_byte_input()`,
+which appends it to a ring buffer. When a byte equals the delimiter and enough
+bytes are buffered, petcol inspects the candidate frame **in place** using
+non-destructive reads — it reads the trailing `length`, sanity-checks it
+(`length < PACKETSIZE_MAX` and enough bytes present), reads the stored `crc32`,
+and recomputes the CRC over the payload. Only if the two match does it consume
+the frame: it returns the packet and flushes any bytes that preceded it to the
+extra-data callback. If the CRC does not match — for example a stray delimiter
+byte inside data — the buffer is left exactly as it was and the byte is treated
+as ordinary data, so there is no copy-out-and-restore. Any byte too old to still
+be part of a pending frame is released to the extra-data callback in arrival
+order, so nothing is ever silently dropped.
 
 ## Delimiter (per instance)
 
@@ -114,6 +125,8 @@ multiple petcol instances share one serial link as independent channels (e.g.
 one for application packets and one for piped-through debug output via the
 extra-data callback).
 
+![Two petcol instances with different delimiters share one serial link and are routed back into separate channels](docs/petcol-multichannel.svg)
+
 ## Message types
 
 The first payload byte selects the message:
@@ -126,3 +139,31 @@ The first payload byte selects the message:
 Receiving any valid packet also resets the firmware's heartbeat timer, which
 switches the display from standalone (animation) mode to online (host stats)
 mode.
+
+## Virtual serial port (example application)
+
+Because petcol hands back everything that *isn't* a packet, it can power a
+transparent bridge on the host: a small tool owns the real serial port
+(`/dev/ttyUSB0`) and exposes a **virtual port** (a pty, e.g. `/tmp/ttyLIME`).
+It decodes petcol packets for your application and forwards every other byte to
+the virtual port. Point the Arduino Serial Monitor at the virtual port and it
+sees only the human-readable debug output, while structured data is filtered out
+on the side — no second UART, no escaping, no broken framing.
+
+![A bridge owns the real port and exposes a virtual one: petcol packets go to your app, plain debug goes to the Serial Monitor over /tmp/ttyLIME](docs/petcol-virtual-port.svg)
+
+Scope worth knowing up front:
+
+- **Monitoring is fully transparent**, including *reset-on-open*: the monitor
+  toggles DTR/RTS on the virtual port, the bridge reads those modem lines and
+  mirrors them onto the real port, so the board resets when you open the monitor
+  exactly as it does today.
+- **Uploads bypass the bridge.** `avrdude` pulses DTR and then speaks STK500 to
+  the bootloader with tight timing and wants exclusive access to the port, so
+  routing an upload through a pty hop is fragile. The clean answer is to release
+  the real port for uploads (or upload to it directly) and re-attach afterwards,
+  which keeps "edit → upload → monitor" working without emulating the bootloader.
+
+This is a planned host tool, not yet implemented; it needs the host-side petcol
+decoder (the mirror of the firmware's `recv_byte_input`) that `petcol.py` will
+grow.

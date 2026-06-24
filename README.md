@@ -3,6 +3,17 @@ Code and firmware for a 20*2 LCD showing stats for CPU, RAM, ip adress
 
 See firmware for hardware setup, its pretty straight forward
 
+## petcol — the protocol behind it
+
+The host and firmware talk over **petcol**: a tiny self-synchronising framing
+layer that wraps arbitrary payloads in a CRC-32 and a trailing delimiter. The
+point is that it *gets out of your way* — it carries packets over an arbitrary
+byte stream and hands back anything that isn't a packet, so framed data can
+coexist with other traffic, and a stray delimiter inside your data can't break
+framing because the CRC has to match too. Full spec in [PETCOL.md](PETCOL.md).
+
+![petcol: one stream carries framed packets alongside other bytes; the receiver pulls the packets out and hands back the rest](docs/petcol-coexist.svg)
+
 ## Repository layout
 
 ```
@@ -34,9 +45,7 @@ Run `python3 limesplay.py --help` for all options.
 
 `petcol.py` implements the serial framing the firmware expects:
 
-```
-[ payload ][ crc32 u32 LE ][ length u16 LE ][ 0xAA ]
-```
+![petcol frame layout: payload, crc32, length, delimiter](docs/petcol-frame.svg)
 
 The first payload byte is the message type (`1` = LCD text, `2` = LED RGB) and
 the checksum is a standard CRC-32, matching the firmware's `make_CRC`. See
