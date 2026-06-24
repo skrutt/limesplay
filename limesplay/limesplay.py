@@ -1,124 +1,193 @@
+#!/usr/bin/env python3
 # coding: utf-8
+"""limesplay - drive a 20x2 LCD with CPU / RAM / clock / IP stats.
 
-from os.path import exists
-import serial, psutil
-from time import sleep
-import datetime
-#for ips
-import socket
-import fcntl
-import struct
+Rewritten for Python 3 (tested on Arch/Manjaro). Talks to the limesplay
+firmware over serial using the petcol protocol (see ``petcol.py``).
 
-def get_ip_address(ifname):
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    return socket.inet_ntoa(fcntl.ioctl(
-        s.fileno(),
-        0x8915,  # SIOCGIFADDR
-        struct.pack('256s', ifname[:15])
-    )[20:24])
+Examples::
 
-#get_ip_address('eth0')  # '192.168.0.110'
+    limesplay.py                      # auto-detect port, run forever
+    limesplay.py --port /dev/ttyUSB0  # explicit port
+    limesplay.py --interface wlan0    # prefer a specific NIC for the IP line
+    limesplay.py --no-serial          # render to stdout, no hardware needed
+"""
 
-def get_ip(ifname):
+import argparse
+import glob
+import sys
+import time
+from datetime import datetime
+
+import psutil
+
+from petcol import PetcolClient
+
+LCD_COLS = 20
+LCD_ROWS = 2
+LCD_SIZE = LCD_COLS * LCD_ROWS
+
+FULL_BLOCK = "\xff"  # HD44780 solid block glyph
+
+# Interfaces tried (in order) when none is given on the command line.
+DEFAULT_IFACE_ORDER = ("wlan0", "wlan1", "eth0", "eth1", "eth2", "eth3", "usb0")
+
+# HD44780 (A02 ROM) codes for Scandinavian glyphs, kept from the original tool.
+SCANDINAVIAN_MAP = {
+    "å": 0x86, "Å": 0x8F,
+    "ä": 0xE1, "Ä": 0x8E,
+    "ö": 0xEF, "Ö": 0x99,
+}
+
+
+def to_lcd_bytes(text):
+    """Encode ``text`` for the LCD, remapping Scandinavian glyphs."""
+    out = bytearray()
+    for ch in text:
+        if ch in SCANDINAVIAN_MAP:
+            out.append(SCANDINAVIAN_MAP[ch])
+        else:
+            out.extend(ch.encode("latin-1", "replace"))
+    return bytes(out)
+
+
+def make_bar(percent, length=12):
+    """Render a ``[####    ]`` style bar of total width ``length``."""
+    inner = length - 2
+    filled = int(round(percent / 100.0 * inner))
+    filled = max(0, min(inner, filled))
+    return "[" + FULL_BLOCK * filled + " " * (inner - filled) + "]"
+
+
+def fit(text, width=LCD_COLS):
+    """Pad or truncate ``text`` to exactly ``width`` characters."""
+    return text[:width].ljust(width)
+
+
+def get_ip(preferred=None):
+    """Return the first non-loopback IPv4 address, honouring ``preferred``."""
+    addrs = psutil.net_if_addrs()
+    order = []
+    if preferred:
+        order.append(preferred)
+    order.extend(i for i in DEFAULT_IFACE_ORDER if i != preferred)
+    # Fall back to whatever else exists on the machine.
+    order.extend(i for i in addrs if i not in order)
+
+    for iface in order:
+        for snic in addrs.get(iface, ()):
+            if snic.family == psutil.AF_INET and not snic.address.startswith("127."):
+                return snic.address
+    return "no_ip"
+
+
+def render(count, preferred_iface=None):
+    """Build the 40-character LCD buffer for the current tick."""
+    now = datetime.now()
+    cpu = psutil.cpu_percent(interval=None)
+    ram = psutil.virtual_memory().percent
+
+    line1 = fit("CPU" + make_bar(cpu) + now.strftime("%H:%M"))
+
+    # Show the IP for 5 out of every 15 ticks, like the original.
+    if (count % 15) >= 10:
+        line2 = fit("IP " + get_ip(preferred_iface))
+    else:
+        line2 = fit("RAM" + make_bar(ram) + now.strftime("%m-%d"))
+
+    return line1 + line2
+
+
+def find_port():
+    """Best-effort auto-detection of the serial port."""
+    try:
+        from serial.tools import list_ports
+        ports = [p.device for p in list_ports.comports()]
+    except Exception:
+        ports = []
+    ports += sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*"))
+    seen = []
+    for p in ports:
+        if p not in seen:
+            seen.append(p)
+    return seen[0] if seen else None
+
+
+class StdoutTransport:
+    """Fake transport for ``--no-serial``: renders the latest LCD text."""
+
+    def write(self, data):
+        # Strip the petcol framing back off so we can show what the LCD sees.
+        # Payload is everything before the 7-byte trailer (u32 + u16 + 0xAA).
+        payload = data[:-7]
+        if not payload or payload[0] != 1:
+            return  # only LCD-text packets are human-readable
+        text = payload[1:].decode("latin-1")
+        top, bottom = text[:LCD_COLS], text[LCD_COLS:LCD_SIZE]
+        bar = "+" + "-" * LCD_COLS + "+"
+        sys.stdout.write("\r\n".join((bar, "|" + fit(top) + "|",
+                                      "|" + fit(bottom) + "|", bar)) + "\r\n\n")
+        sys.stdout.flush()
+
+
+def open_serial(port, baud):
+    import serial
+    if port is None:
+        port = find_port()
+        if port is None:
+            sys.exit("No serial port found. Pass --port or use --no-serial.")
+    print("Opening %s @ %d baud" % (port, baud))
+    return serial.Serial(port, baud, timeout=0)
+
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--port", help="serial device (default: auto-detect)")
+    parser.add_argument("--baud", type=int, default=115200,
+                        help="baud rate (default: 115200, matches firmware)")
+    parser.add_argument("--interface", help="preferred network interface for the IP line")
+    parser.add_argument("--interval", type=float, default=0.3,
+                        help="seconds between updates (default: 0.3)")
+    parser.add_argument("--led", metavar="R,G,B",
+                        help="set the online LED colour once at startup, e.g. 255,0,255")
+    parser.add_argument("--no-serial", action="store_true",
+                        help="render to stdout instead of a serial port")
+    parser.add_argument("--once", action="store_true",
+                        help="render a single frame and exit")
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+
+    if args.no_serial:
+        transport = StdoutTransport()
+    else:
+        transport = open_serial(args.port, args.baud)
+
+    client = PetcolClient(transport)
+
+    if args.led:
         try:
-                ip = get_ip_address(ifname);
-        except IOError: #No ip on that interface!
-                ip = 'no_ip'
-        return ip
+            r, g, b = (int(x) for x in args.led.split(","))
+        except ValueError:
+            sys.exit("--led expects R,G,B integers, e.g. 255,0,255")
+        client.send_color(r, g, b)
 
+    psutil.cpu_percent(interval=None)  # prime the CPU meter
 
-def main():
-    ser=initSer()   #get serialport
-    #Do main stuff
     count = 0
-    while ser:
-        #Send start byte here
-        ser.write(chr(1))
-        ser.write("Cpu" + bar(psutil.cpu_percent(),12) )
-        ser.write(str(datetime.datetime.now())[11:16])
-        #flip page
-        if ((count % 15) >= 10):
-                ip_str = get_ip('wlan1')
-		if(ip_str == 'no_ip'):	#try to get ip for different interfaces
-			ip_str = get_ip('eth0')
-		if(ip_str == 'no_ip'):
-			ip_str = get_ip('eth1')
-		if(ip_str == 'no_ip'):
-			ip_str = get_ip('eth2')
-		if(ip_str == 'no_ip'):
-			ip_str = get_ip('eth3')
-		if(ip_str == 'no_ip'):
-			ip_str = get_ip('usb0')
-                ser.write("IP: " + ip_str + '             ')
-	else:
-	        ser.write("Ram" + bar(ram_percent(),12))
-       		ser.write(str(datetime.datetime.now())[5:10])
-        sleep(0.3) 
-        count += 1
-        if count > 255:
-            count = 0    
-    print 'Init serial returned false'
+    try:
+        while True:
+            client.send_text(to_lcd_bytes(render(count, args.interface)))
+            if args.once:
+                break
+            count = (count + 1) % 256
+            time.sleep(args.interval)
+    except KeyboardInterrupt:
+        print("\nbye")
 
-def ram_free():
-    free = psutil.cached_phymem() + psutil.avail_phymem() + psutil.phymem_buffers()
-    return free
-    
-def ram_total():
-    return psutil.TOTAL_PHYMEM
-    
-def ram_percent():
-    ram = 1.0 - float(ram_free()) / ram_total()
-    return ram * 100
-    
-def bar(percent, length = 10):
-    bar = '['
-    for x in range(length - 2):
-        if percent > 100.0 * x / (length - 2):
-            bar += chr(255)
-        else:
-            bar += ' '
-    return bar + ']'
-def scandinavianSupport(text):
-    textlist = list(text)   #make a list 
-    text=''
-    for c in range(len(textlist)):
-        if textlist[c]=='å':
-            text+=chr(134)
-        elif textlist[c]=='Å':
-            text+=chr(143)
-        elif textlist[c]=='ä':
-            text+=chr(225) # new
-        elif textlist[c]=='Ä':     #change letters to right machinecode
-            text+=chr(142)
-        elif textlist[c]=='ö':
-            text+=chr(239)  # new
-        elif textlist[c]=='Ö':
-            text+=chr(153)
-        else:
-            text+=repr(textlist[c])[2]
-    return text #return new string
-  
-def initSer(baud=19200,timeout=0):
-    #find and open serialport
-    serpath=''  #init variable
-    for num in range(10):            #search ports 0-10
-        serpath = '/dev/ttyUSB{}'.format(num)
-        if exists(serpath):    #run program with found port
-            break
-        else:
-            print '{} not found'.format(serpath)
-            if num == 9:
-                print 'Serialtty not found.'
-                print 'Failed opening serialport.'
-                return False
-    
-    print 'Trying to open', serpath
-    ser=serial.Serial(serpath,baud,timeout=timeout)
-    if ser.isOpen():
-        
-        print 'Success, Stty open at', serpath
-        return ser
-    print 'Failed opening serialport. ???'
-    return False
-    
-main()   
+
+if __name__ == "__main__":
+    main()
