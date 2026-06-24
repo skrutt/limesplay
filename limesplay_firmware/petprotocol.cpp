@@ -37,121 +37,113 @@ uint32_t petcol::make_CRC(const void * data, uint16_t len)
 
     return crc ^ 0xFFFFFFFFUL;
 }
-// Send data in a packet
+// Send data in a packet: [payload][crc u32 LE][length u16 LE][delimiter].
+// The header is serialised byte by byte so the wire format never depends on
+// struct padding/alignment.
 bool petcol::sendFunc(const void * data, uint16_t len)
 {
     if(!data || !len)
     {
         return false;
     }
-    //Set packet_header
-    packet_header send_header;
 
-    send_header.CRC = make_CRC(data, len);
-    send_header.length = len;
+    uint32_t crc = make_CRC(data, len);
 
-    //Send data
     send_data_callback(data, len);
 
-    send_data_callback(&send_header, sizeof(send_header));
-
-    uint8_t endbyte;
-    endbyte = delimiter;
-    send_data_callback(&endbyte, 1);
+    uint8_t trailer[7];
+    trailer[0] = (uint8_t)(crc      );
+    trailer[1] = (uint8_t)(crc >>  8);
+    trailer[2] = (uint8_t)(crc >> 16);
+    trailer[3] = (uint8_t)(crc >> 24);
+    trailer[4] = (uint8_t)(len      );
+    trailer[5] = (uint8_t)(len >>  8);
+    trailer[6] = delimiter;
+    send_data_callback(trailer, sizeof(trailer));
 
     return true;
 }
-// #define COPY_FROM_BUF_TO_PTR(PTR, SIZE) for (uint16_t i = 0; i < SIZE; i++)
-#define COPY_FROM_BUF_TO_PTR(PTR, SIZE) for (uint16_t i = SIZE ; i != 0; i--) \
-{\
-    ((uint8_t*)PTR)[i - 1] = recv_ring_buf.getlast();\
-}
 
-// #define COPY_FROM_PTR_TO_BUF(PTR, SIZE) for (uint16_t i = SIZE ; i != 0; i--)
-#define COPY_FROM_PTR_TO_BUF(PTR, SIZE) for (uint16_t i = 0; i < SIZE; i++) \
-{\
-    recv_ring_buf.put(((uint8_t*)PTR)[i]);\
-}
+// Trailer size on the wire: crc (4) + length (2). The delimiter is not buffered.
+#define PETCOL_TRAILER 6
 
-//Recv.. Put byte in buffer, check for packet, return packet if accurat
+// Largest frame that can sit in the buffer before its delimiter arrives:
+// the biggest legal payload (PACKETSIZE_MAX - 1) plus the trailer. A byte older
+// than this window can never become part of a future packet, so it is released
+// to the extra-data callback. The ring buffer is sized strictly larger than this
+// so the spill below always fires before the buffer could overwrite anything.
+#define PETCOL_MAX_PENDING ((PACKETSIZE_MAX - 1) + PETCOL_TRAILER)
+static_assert(RECV_BUFSIZE > PETCOL_MAX_PENDING,
+              "recv buffer must hold a full max-size frame without overwriting");
+
+// Recv: buffer the byte; when a delimiter could close a frame, inspect the
+// candidate trailing frame *without* disturbing the buffer and only consume it
+// once the CRC matches. A delimiter that does not complete a valid frame leaves
+// the buffer untouched - no copy-out/copy-back.
 packet_recieved *petcol::recv_byte_input(uint8_t byte)
 {
-
-    if ( (byte == delimiter) && ((sizeof(packet_header) + 1) <= recv_ring_buf.sizeavailable()) )
+    if (byte == delimiter && recv_ring_buf.count() >= PETCOL_TRAILER)
     {
-        //We found a closebyte, check if this is a valid packet!
-        packet_header header;
+        const uint16_t count = recv_ring_buf.count();
 
-        //Get len
-        COPY_FROM_BUF_TO_PTR(&header.length, 2);
+        // The two newest bytes are the length (little-endian).
+        uint16_t length = (uint16_t)recv_ring_buf.at(count - 2)
+                        | ((uint16_t)recv_ring_buf.at(count - 1) << 8);
 
-        //Check if lengh is sane
-        if ( (header.length < PACKETSIZE_MAX) && ((header.length + 4 ) <= recv_ring_buf.sizeavailable()) )
+        if (length > 0 && length < PACKETSIZE_MAX
+            && count >= (uint16_t)(length + PETCOL_TRAILER))
         {
-            //Seems like we have a packet
-            //Next up is to copy data and check CRC
-            COPY_FROM_BUF_TO_PTR(&header.CRC, 4);
+            // Layout at the tail (oldest -> newest): [payload][crc][length].
+            const uint16_t crc_pos     = count - PETCOL_TRAILER;
+            const uint16_t payload_pos = crc_pos - length;
 
-            COPY_FROM_BUF_TO_PTR(recv_packet.data, header.length);
+            uint32_t want_crc = (uint32_t)recv_ring_buf.at(crc_pos)
+                              | ((uint32_t)recv_ring_buf.at(crc_pos + 1) <<  8)
+                              | ((uint32_t)recv_ring_buf.at(crc_pos + 2) << 16)
+                              | ((uint32_t)recv_ring_buf.at(crc_pos + 3) << 24);
 
-
-            uint32_t CRC = make_CRC(recv_packet.data, header.length);
-
-            // Serial.print("\nHeader: ");
-            // for (size_t i = 0; i < sizeof(packet_header); i++)
-            // {
-            //     Serial.print(((uint8_t*)&header)[i]);
-            //     Serial.print(' ');
-            // }
-            // Serial.print("\nlength: ");
-            // Serial.print(header.length);
-            // Serial.print("\nCRC: ");
-            // Serial.print(header.CRC);
-            // Serial.print("\nCalculated CRC: ");
-            // Serial.print(CRC);
-            // Serial.println(" end");
-
-            if (header.CRC == CRC)
+            for (uint16_t i = 0; i < length; i++)
             {
-                //Match!
-                recv_packet.length = header.length;
+                recv_packet.data[i] = recv_ring_buf.at(payload_pos + i);
+            }
 
-                //Add spitting out any remaining data here!
-                if (extra_data_callback)    //If callback for extra data is activated, spit them out here
+            if (make_CRC(recv_packet.data, length) == want_crc)
+            {
+                recv_packet.length = length;
+
+                // Everything before the payload is non-packet "extra" data;
+                // hand it to the owner in arrival order.
+                for (uint16_t i = 0; i < payload_pos; i++)
                 {
-                    while (recv_ring_buf.available())
-                    {                                   //This should not be a serial write, but a return of bytes to our owner
-                        extra_data_callback(recv_ring_buf.get());
+                    uint8_t extra = recv_ring_buf.pop();
+                    if (extra_data_callback)
+                    {
+                        extra_data_callback(extra);
                     }
                 }
 
-                //Since there is a return here, all below code is for not matching packets!
+                // Drop the consumed frame (the delimiter was never buffered).
+                recv_ring_buf.clear();
+
                 return &recv_packet;
             }
-
-            //Not match,  we have to restore the mess we made
-            COPY_FROM_PTR_TO_BUF(recv_packet.data, header.length);      //FIXME, err, this should probably be ptr to buf? FIXD
-            COPY_FROM_PTR_TO_BUF(&header.CRC, 4);
         }
-        //Seems like not
-        COPY_FROM_PTR_TO_BUF(&header.length, 2);
-
     }
-    //No go, add byte to buffer
-    recv_ring_buf.put(byte);
 
-    //TODO; add passing on of extra bytes in excess of max packet length.. or possibly exceeding our buffer
-    if (recv_ring_buf.sizeavailable() >= PACKETSIZE_MAX)
+    // Not a frame boundary (or not a valid frame): ordinary data.
+    recv_ring_buf.push(byte);
+
+    // Keep the backlog bounded: any byte older than the largest possible pending
+    // frame can never become part of a packet, so release it - in arrival order -
+    // to the extra-data callback. Nothing is ever silently dropped.
+    while (recv_ring_buf.count() > PETCOL_MAX_PENDING)
     {
-        if (extra_data_callback)    //If callback for extra data is activated, spit them out here
+        uint8_t extra = recv_ring_buf.pop();
+        if (extra_data_callback)
         {
-            extra_data_callback(recv_ring_buf.get());
-        }
-        else
-        {
-            recv_ring_buf.get();
+            extra_data_callback(extra);
         }
     }
 
-    return NULL;
+    return nullptr;
 }

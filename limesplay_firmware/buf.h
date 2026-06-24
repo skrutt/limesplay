@@ -1,226 +1,74 @@
-
 /**
- * @file    Buffer.h
- * @brief   Software Buffer - Templated Ring Buffer for most data types
- * @author  sam grove
- * @version 1.0
- * @see
+ * @file    buf.h
+ * @brief   MyBuffer - a fixed-capacity templated ring buffer (FIFO)
  *
- * Copyright (c) 2013
+ * A small, header-only ring buffer sized at compile time (no heap). Besides the
+ * usual FIFO push/pop it offers non-destructive random access (`at`) and a way
+ * to discard the newest elements (`dropBack`), which lets petcol inspect a
+ * candidate frame at the tail of the stream and only consume it once its CRC
+ * checks out - without copying bytes out and back.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Overflow policy: pushing into a full buffer overwrites the oldest element.
  */
 
 #ifndef MYBUFFER_H
 #define MYBUFFER_H
 
 #include <stdint.h>
-#include <string.h>
 
-/** A templated software ring buffer
- *
- * Example:
- * @code
- *  #include "mbed.h"
- *  #include "MyBuffer.h"
- *
- *  MyBuffer <char> buf;
- *
- *  int main()
- *  {
- *      buf = 'a';
- *      buf.put('b');
- *      char *head = buf.head();
- *      puts(head);
- *
- *      char whats_in_there[2] = {0};
- *      int pos = 0;
- *
- *      while(buf.available())
- *      {
- *          whats_in_there[pos++] = buf;
- *      }
- *      printf("%c %c\n", whats_in_there[0], whats_in_there[1]);
- *      buf.clear();
- *      error("done\n\n\n");
- *  }
- * @endcode
- */
-
-template <typename T>
+template <typename T, uint16_t N>
 class MyBuffer
 {
+    static_assert(N > 0, "MyBuffer capacity must be greater than zero");
+
 private:
-    T   *_buf;
-    volatile uint32_t   _wloc;
-    volatile uint32_t   _rloc;
-    uint32_t            _size;
+    T        _buf[N];
+    uint16_t _tail = 0;    // index of the oldest element
+    uint16_t _count = 0;   // number of elements currently held
+
+    uint16_t headIndex() const { return (uint16_t)((_tail + _count) % N); }
 
 public:
-    /** Create a Buffer and allocate memory for it
-     *  @param size The size of the buffer
-     */
-    MyBuffer(uint32_t size = 0x100);
+    /** Number of elements currently held. */
+    uint16_t count() const { return _count; }
 
-    /** Get the size of the ring buffer
-     * @return the size of the ring buffer
-     */
-     uint32_t getSize();
+    /** Total capacity. */
+    uint16_t capacity() const { return N; }
 
-    /** Destry a Buffer and release it's allocated memory
-     */
-    ~MyBuffer();
+    /** True when no elements are held. */
+    bool empty() const { return _count == 0; }
 
-    /** Add a data element into the buffer
-     *  @param data Something to add to the buffer
-     */
-    void put(T data);
+    /** Discard all elements. */
+    void clear() { _tail = 0; _count = 0; }
 
-    /** Remove a data element from the buffer
-     *  @return Pull the oldest element from the buffer
-     */
-    T get(void);
-
-    /** Remove a data element from the buffer
-     *  @return Pull the oldest element from the buffer
-     */
-    T getlast(void);
-
-    /** Add a data element into the buffer to the front
-     *  @param data Something to add to the buffer
-     */
-    void unget(T data);
-
-    /** Get the address to the head of the buffer
-     *  @return The address of element 0 in the buffer
-     */
-    T *head(void);
-
-    /** Reset the buffer to 0. Useful if using head() to parse packeted data
-     */
-    void clear(void);
-
-    /** Determine if anything is readable in the buffer
-     *  @return 1 if something can be read, 0 otherwise
-     */
-    uint32_t available(void);
-
-    /** Determine if anything is readable in the buffer
-     *  @return 1 if something can be read, 0 otherwise
-     */
-    uint32_t sizeavailable(void);
-
-    /** Overloaded operator for writing to the buffer
-     *  @param data Something to put in the buffer
-     *  @return
-     */
-    MyBuffer &operator= (T data)
+    /** Append one element. Overwrites the oldest element when full. */
+    void push(T data)
     {
-        put(data);
-        return *this;
+        _buf[headIndex()] = data;
+        if (_count == N)
+        {
+            _tail = (uint16_t)((_tail + 1) % N);   // full: drop the oldest
+        }
+        else
+        {
+            _count++;
+        }
     }
 
-    /** Overloaded operator for reading from the buffer
-     *  @return Pull the oldest element from the buffer
-     */
-    operator int(void)
+    /** Remove and return the oldest element. Caller must ensure !empty(). */
+    T pop()
     {
-        return get();
+        T data = _buf[_tail];
+        _tail = (uint16_t)((_tail + 1) % N);
+        _count--;
+        return data;
     }
 
-     uint32_t peek(char c);
+    /** Non-destructive read of the k-th element from the oldest (0 = oldest). */
+    T at(uint16_t k) const { return _buf[(uint16_t)((_tail + k) % N)]; }
 
+    /** Discard the n newest elements. Caller must ensure n <= count(). */
+    void dropBack(uint16_t n) { _count -= n; }
 };
-
-template <class T>
-inline void MyBuffer<T>::put(T data)
-{
-    _buf[_wloc++] = data;
-    _wloc %= (_size);
-
-    //check if full
-    if (_wloc == _rloc)
-    {
-        _rloc++;
-        _rloc %= (_size);
-    }
-
-    return;
-}
-
-template <class T>
-inline void MyBuffer<T>::unget(T data)
-{
-    if(_rloc == 0)
-        _rloc = _size;
-
-    _buf[--_rloc] = data;
-
-    //check if full
-    // if (_wloc == _rloc)  //We cant check if full since we are reversing
-    // {
-    //     _rloc++;
-    //     _rloc %= (_size-1);
-    // }
-
-    return;
-}
-
-template <class T>
-inline T MyBuffer<T>::get(void)
-{
-    T data_pos = _buf[_rloc++];
-    _rloc %= _size;
-
-    return data_pos;
-}
-
-template <class T>
-inline T MyBuffer<T>::getlast(void)
-{
-    if(_wloc == 0)
-        _wloc = _size;
-
-    T data_pos = _buf[--_wloc];
-
-    return data_pos;
-}
-
-template <class T>
-inline T *MyBuffer<T>::head(void)
-{
-    T *data_pos = &_buf[0];
-
-    return data_pos;
-}
-
-template <class T>
-inline uint32_t MyBuffer<T>::available(void)
-{
-    return (_wloc == _rloc) ? 0 : 1;
-}
-
-template <class T>
-inline uint32_t MyBuffer<T>::sizeavailable(void)
-{
-    if (_wloc < _rloc)
-    {
-        return (_wloc + _size - _rloc) ;
-    }
-
-    return (_wloc - _rloc) ;
-}
-
-
 
 #endif

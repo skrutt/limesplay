@@ -24,6 +24,7 @@ from petcol import (  # noqa: E402
 )
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+FIRMWARE = os.path.join(os.path.dirname(os.path.dirname(HERE)), "limesplay_firmware")
 
 
 class _Recorder:
@@ -111,6 +112,83 @@ class ChecksumMatchesFirmwareTests(unittest.TestCase):
                 self._firmware_crc(payload),
                 "mismatch for payload %r" % payload,
             )
+
+
+class FirmwareDecoderTests(unittest.TestCase):
+    """Compile the firmware petcol decoder and feed it frames from petcol.py."""
+
+    @classmethod
+    def setUpClass(cls):
+        cxx = shutil.which("g++") or shutil.which("c++")
+        if not cxx:
+            raise unittest.SkipTest("no C++ compiler available")
+        cls.tmpdir = tempfile.mkdtemp()
+        cls.binary = os.path.join(cls.tmpdir, "recv_harness")
+        subprocess.check_call([
+            cxx, "-std=c++11", "-O2", "-I", FIRMWARE,
+            "-o", cls.binary,
+            os.path.join(HERE, "recv_harness.cpp"),
+            os.path.join(FIRMWARE, "petprotocol.cpp"),
+        ])
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdir, ignore_errors=True)
+
+    def _decode(self, stream):
+        out = subprocess.check_output([self.binary], input=bytes(stream))
+        packets, extra = [], b""
+        for line in out.decode().splitlines():
+            parts = line.split()
+            if parts and parts[0] == "PKT":
+                packets.append(bytes(int(h, 16) for h in parts[1:]))
+            elif parts and parts[0] == "EXTRA":
+                extra = bytes(int(h, 16) for h in parts[1:])
+        return packets, extra
+
+    def test_decodes_frames_and_passes_extra(self):
+        extra1 = b"hello "
+        pkt1 = encode_packet(b"\x01Hi")
+        extra2 = b"\x00\xff debug\n"
+        pkt2 = encode_packet(bytes((2, 255, 0, 128)))
+        # payload that itself contains the delimiter byte (false-positive test)
+        pkt3 = encode_packet(b"\x01" + bytes((PETCOL_BYTE, PETCOL_BYTE, 0x10)))
+
+        stream = extra1 + pkt1 + extra2 + pkt2 + pkt3
+        packets, extra = self._decode(stream)
+
+        self.assertEqual(packets, [
+            b"\x01Hi",
+            bytes((2, 255, 0, 128)),
+            b"\x01" + bytes((PETCOL_BYTE, PETCOL_BYTE, 0x10)),
+        ])
+        # Extra bytes preceding a matched packet are handed back in arrival order.
+        self.assertEqual(extra, extra1 + extra2)
+
+    def test_corrupt_crc_is_not_decoded(self):
+        pkt = bytearray(encode_packet(b"\x01payload"))
+        pkt[0] ^= 0xFF  # corrupt the first payload byte; CRC no longer matches
+        packets, _ = self._decode(bytes(pkt))
+        self.assertEqual(packets, [])
+
+    def test_max_size_packet_with_leading_extra(self):
+        # A near-max payload spans more than a max-size buffer window; the leading
+        # extra must spill out while the whole frame is still recognised.
+        extra = b"extra"* 10                # 50 bytes, no delimiter
+        payload = bytes(range(127))         # max payload (length < PACKETSIZE_MAX)
+        packets, got_extra = self._decode(extra + encode_packet(payload))
+        self.assertEqual(packets, [payload])
+        self.assertEqual(got_extra, extra)
+
+    def test_large_extra_stream_all_delivered_in_order(self):
+        # Lots of non-packet data ahead of a packet: every byte must reach the
+        # extra callback in order (some via the age-out spill, some via the match
+        # flush), and nothing may be dropped.
+        extra = bytes((i * 3 + 1) & 0x7F for i in range(300))  # 300 bytes, no 0xAA
+        payload = b"\x01done"
+        packets, got_extra = self._decode(extra + encode_packet(payload))
+        self.assertEqual(packets, [payload])
+        self.assertEqual(got_extra, extra)
 
 
 if __name__ == "__main__":
