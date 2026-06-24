@@ -66,6 +66,8 @@ python3 petcol_split.py --demo                 # built-in mixed stream, no HW
 python3 petcol_split.py --port /dev/ttyUSB0     # a real board
 ```
 
+![petcol_split.py: a mixed stream split live into a serial-traffic pane and a decoded-packets pane](docs/petcol-split-demo.webp)
+
 ## Firmware (Arduino)
 
 The firmware is a self-contained Arduino sketch in `limesplay_firmware/`. Open
