@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 300" font-family="'DejaVu Sans','Segoe UI',Arial,sans-serif">
+  <rect width="920" height="300" rx="18" fill="#0f172a"/>
+  <rect x="0.5" y="0.5" width="919" height="299" rx="18" fill="none" stroke="#1e293b"/>
+
+  <text x="40" y="56" fill="#a3e635" font-size="26" font-weight="700">petcol frame</text>
+  <text x="40" y="84" fill="#94a3b8" font-size="15">self-synchronising: a CRC-32 over the payload plus a trailing sentinel byte</text>
+
+  <!-- payload -->
+  <rect x="40" y="118" width="360" height="94" rx="10" fill="#84cc16"/>
+  <text x="220" y="158" text-anchor="middle" fill="#0f172a" font-size="22" font-weight="700" font-family="'DejaVu Sans Mono',monospace">payload</text>
+  <text x="220" y="186" text-anchor="middle" fill="#1a2e05" font-size="14">N bytes  ·  payload[0] = type</text>
+
+  <!-- crc -->
+  <rect x="406" y="118" width="170" height="94" rx="10" fill="#38bdf8"/>
+  <text x="491" y="158" text-anchor="middle" fill="#0f172a" font-size="20" font-weight="700" font-family="'DejaVu Sans Mono',monospace">crc32</text>
+  <text x="491" y="186" text-anchor="middle" fill="#082f49" font-size="14">4 bytes · u32 LE</text>
+
+  <!-- length -->
+  <rect x="582" y="118" width="150" height="94" rx="10" fill="#fbbf24"/>
+  <text x="657" y="158" text-anchor="middle" fill="#0f172a" font-size="20" font-weight="700" font-family="'DejaVu Sans Mono',monospace">length</text>
+  <text x="657" y="186" text-anchor="middle" fill="#451a03" font-size="14">2 bytes · u16 LE</text>
+
+  <!-- delimiter -->
+  <rect x="738" y="118" width="142" height="94" rx="10" fill="#fb7185"/>
+  <text x="809" y="158" text-anchor="middle" fill="#0f172a" font-size="20" font-weight="700" font-family="'DejaVu Sans Mono',monospace">0xAA</text>
+  <text x="809" y="186" text-anchor="middle" fill="#4c0519" font-size="14">delimiter</text>
+
+  <!-- direction -->
+  <line x1="40" y1="244" x2="862" y2="244" stroke="#334155" stroke-width="2"/>
+  <polygon points="880,244 862,237 862,251" fill="#334155"/>
+  <text x="40" y="268" fill="#64748b" font-size="13">bytes on the wire</text>
+  <text x="880" y="268" text-anchor="end" fill="#64748b" font-size="13">CRC covers the payload only</text>
+</svg>

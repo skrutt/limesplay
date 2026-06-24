@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 440" font-family="'DejaVu Sans','Segoe UI',Arial,sans-serif">
+  <rect width="1160" height="440" rx="18" fill="#0f172a"/>
+  <rect x="0.5" y="0.5" width="1159" height="439" rx="18" fill="none" stroke="#1e293b"/>
+
+  <text x="40" y="52" fill="#a3e635" font-size="26" font-weight="700">one wire, two kinds of traffic</text>
+  <text x="40" y="78" fill="#94a3b8" font-size="15">petcol pulls structured packets out of the stream on the fly and leaves plain debug output untouched</text>
+
+  <!-- firmware box -->
+  <rect x="34" y="120" width="256" height="224" rx="12" fill="#111c33" stroke="#243049"/>
+  <text x="162" y="150" text-anchor="middle" fill="#e2e8f0" font-size="16" font-weight="700">your firmware</text>
+
+  <rect x="54" y="172" width="216" height="60" rx="8" fill="#1a2e05" stroke="#84cc16"/>
+  <text x="162" y="198" text-anchor="middle" fill="#bef264" font-size="13.5" font-family="'DejaVu Sans Mono',monospace">link.sendFunc(msg)</text>
+  <text x="162" y="218" text-anchor="middle" fill="#84cc16" font-size="11.5">framed packet</text>
+
+  <rect x="54" y="248" width="216" height="60" rx="8" fill="#1c2533" stroke="#64748b"/>
+  <text x="162" y="274" text-anchor="middle" fill="#cbd5e1" font-size="13" font-family="'DejaVu Sans Mono',monospace">Serial.print("temp=24.5")</text>
+  <text x="162" y="294" text-anchor="middle" fill="#94a3b8" font-size="11.5">plain debug text</text>
+
+  <!-- merge arrows -->
+  <path d="M290 202 C 326 202, 326 222, 360 222" fill="none" stroke="#84cc16" stroke-width="2.5"/>
+  <path d="M290 278 C 326 278, 326 236, 360 236" fill="none" stroke="#64748b" stroke-width="2.5"/>
+
+  <!-- mixed stream -->
+  <text x="500" y="184" text-anchor="middle" fill="#64748b" font-size="12">serial link · interleaved byte stream</text>
+  <rect x="360" y="198" width="288" height="62" rx="10" fill="#0b1426" stroke="#243049"/>
+  <rect x="370" y="213" width="48" height="32" rx="6" fill="#84cc16"/><text x="394" y="234" text-anchor="middle" fill="#0f172a" font-size="12" font-weight="700" font-family="'DejaVu Sans Mono',monospace">PKT</text>
+  <rect x="424" y="213" width="44" height="32" rx="6" fill="#334155"/><text x="446" y="234" text-anchor="middle" fill="#cbd5e1" font-size="12" font-family="'DejaVu Sans Mono',monospace">t=2</text>
+  <rect x="474" y="213" width="48" height="32" rx="6" fill="#84cc16"/><text x="498" y="234" text-anchor="middle" fill="#0f172a" font-size="12" font-weight="700" font-family="'DejaVu Sans Mono',monospace">PKT</text>
+  <rect x="528" y="213" width="50" height="32" rx="6" fill="#334155"/><text x="553" y="234" text-anchor="middle" fill="#cbd5e1" font-size="12" font-family="'DejaVu Sans Mono',monospace">4.5</text>
+  <rect x="584" y="213" width="48" height="32" rx="6" fill="#84cc16"/><text x="608" y="234" text-anchor="middle" fill="#0f172a" font-size="12" font-weight="700" font-family="'DejaVu Sans Mono',monospace">PKT</text>
+
+  <!-- arrow to receiver -->
+  <line x1="648" y1="229" x2="704" y2="229" stroke="#475569" stroke-width="2.5"/>
+  <polygon points="720,229 704,222 704,236" fill="#475569"/>
+
+  <!-- receiver box -->
+  <rect x="720" y="120" width="128" height="224" rx="12" fill="#111c33" stroke="#243049"/>
+  <text x="784" y="152" text-anchor="middle" fill="#e2e8f0" font-size="15" font-weight="700">petcol</text>
+  <text x="784" y="172" text-anchor="middle" fill="#94a3b8" font-size="10.5" font-family="'DejaVu Sans Mono',monospace">recv_byte_input</text>
+  <line x1="740" y1="186" x2="828" y2="186" stroke="#243049"/>
+  <text x="784" y="232" text-anchor="middle" fill="#a3e635" font-size="13">verify CRC-32</text>
+  <text x="784" y="254" text-anchor="middle" fill="#94a3b8" font-size="12">split the stream</text>
+
+  <!-- outputs -->
+  <path d="M848 202 C 884 202, 884 176, 918 176" fill="none" stroke="#84cc16" stroke-width="2.5"/>
+  <polygon points="934,176 918,169 918,183" fill="#84cc16"/>
+  <path d="M848 266 C 884 266, 884 306, 918 306" fill="none" stroke="#64748b" stroke-width="2.5"/>
+  <polygon points="934,306 918,299 918,313" fill="#64748b"/>
+
+  <text x="944" y="172" fill="#bef264" font-size="15" font-weight="700">your app</text>
+  <text x="944" y="191" fill="#84cc16" font-size="11.5">CRC-checked packets</text>
+  <text x="944" y="302" fill="#cbd5e1" font-size="15" font-weight="700">Serial Monitor</text>
+  <text x="944" y="321" fill="#94a3b8" font-size="11.5">debug, byte-for-byte</text>
+
+  <text x="580" y="406" text-anchor="middle" fill="#cbd5e1" font-size="15">No second UART, no escaping, no corrupted framing — the extra-data callback hands you everything that isn't a packet.</text>
+</svg>
