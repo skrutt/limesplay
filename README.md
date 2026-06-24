@@ -28,13 +28,12 @@ Run `python3 limesplay.py --help` for all options.
 `petcol.py` implements the serial framing the firmware expects:
 
 ```
-[ payload ][ checksum u32 LE ][ length u16 LE ][ 0xAA ]
+[ payload ][ crc32 u32 LE ][ length u16 LE ][ 0xAA ]
 ```
 
-The first payload byte is the message type (`1` = LCD text, `2` = LED RGB). The
-checksum currently mirrors the firmware's additive checksum so the tool works
-with existing firmware without reflashing; it is isolated in a single function
-so it can later be swapped for a real CRC-32 alongside a firmware update.
+The first payload byte is the message type (`1` = LCD text, `2` = LED RGB) and
+the checksum is a standard CRC-32, matching the firmware's `make_CRC`. See
+[PETCOL.md](PETCOL.md) for the full protocol spec.
 
 ### Tests
 

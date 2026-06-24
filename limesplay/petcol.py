@@ -6,16 +6,15 @@ Wire format (as implemented by ``petprotocol.cpp`` in the firmware)::
     [ payload bytes ][ checksum u32 LE ][ length u16 LE ][ 0xAA ]
 
 * ``payload``  - the message bytes. The first byte is the message *type*.
-* ``checksum`` - 32-bit value computed by :func:`petcol_checksum` over the
-                 payload (see below). Stored little-endian.
+* ``checksum`` - CRC-32 (IEEE 802.3 / zlib) of the payload bytes, stored
+                 little-endian.
 * ``length``   - number of payload bytes, little-endian ``uint16``.
 * ``0xAA``     - the ``PETCOL_BYTE`` frame terminator.
 
-The firmware currently uses a weak additive checksum rather than a true CRC.
-:func:`petcol_checksum` reproduces it byte-for-byte so this client is
-compatible with the *existing* firmware without reflashing. The checksum is
-injected into :class:`PetcolClient` as a single function, so swapping in a real
-CRC-32 later (once the firmware is updated to match) is a one-line change.
+:func:`petcol_checksum` is a standard CRC-32, matching ``petcol::make_CRC`` in
+the firmware byte-for-byte. It is injected into :class:`PetcolClient` as a
+single function, so an alternative checksum can be swapped in without touching
+the rest of the client.
 
 Message types understood by the firmware:
 
@@ -26,6 +25,7 @@ Message types understood by the firmware:
 """
 
 import struct
+import zlib
 
 PETCOL_BYTE = 0xAA
 PACKETSIZE_MAX = 128
@@ -35,26 +35,12 @@ MSG_LED_COLOR = 2
 
 
 def petcol_checksum(payload):
-    """Compute the firmware's additive checksum over ``payload``.
+    """CRC-32 (IEEE 802.3 / zlib) of ``payload``.
 
-    Mirrors ``petcol::make_CRC`` in ``petprotocol.cpp``: four accumulator
-    "lanes" (bytes) collect ``payload[i]`` indexed by ``i % 4``; the two bytes
-    of the length are then folded in at the following indices. The lanes are
-    packed little-endian into the returned ``uint32``.
+    Identical to ``petcol::make_CRC`` in ``petprotocol.cpp`` (reflected,
+    polynomial ``0xEDB88320``).
     """
-    lanes = [0, 0, 0, 0]
-    i = 0
-    for byte in payload:
-        lanes[i % 4] = (lanes[i % 4] + byte) & 0xFF
-        i += 1
-
-    length = len(payload)
-    len_bytes = (length & 0xFF, (length >> 8) & 0xFF)
-    lanes[i % 4] = (lanes[i % 4] + len_bytes[0]) & 0xFF
-    i += 1
-    lanes[i % 4] = (lanes[i % 4] + len_bytes[1]) & 0xFF
-
-    return lanes[0] | (lanes[1] << 8) | (lanes[2] << 16) | (lanes[3] << 24)
+    return zlib.crc32(bytes(payload)) & 0xFFFFFFFF
 
 
 def encode_packet(payload, checksum=petcol_checksum):

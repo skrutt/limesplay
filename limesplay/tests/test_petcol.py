@@ -44,6 +44,10 @@ class EncodeTests(unittest.TestCase):
         self.assertEqual(crc, petcol_checksum(payload))
         self.assertEqual(packet[-1], PETCOL_BYTE)
 
+    def test_known_crc32_vector(self):
+        # Canonical CRC-32 check value for the ASCII string "123456789".
+        self.assertEqual(petcol_checksum(b"123456789"), 0xCBF43926)
+
     def test_rejects_empty_and_oversize(self):
         with self.assertRaises(ValueError):
             encode_packet(b"")
