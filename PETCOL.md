@@ -5,6 +5,45 @@ to talk to the firmware (`limesplay/limesplay_firmware/src/petprotocol.cpp`).
 It frames arbitrary byte payloads, protects them with a CRC-32, and uses a
 trailing sentinel byte so the receiver can find packet boundaries in a stream.
 
+## Model and API (firmware)
+
+A `petcol` instance does **not** own the serial link — you hand it a function
+that writes raw bytes out, and it frames/deframes on top of that. There is no
+"receive callback": you transmit by calling a method, and you receive by feeding
+incoming bytes in one at a time and checking the return value.
+
+```cpp
+// A function that writes raw bytes to the link (e.g. Serial).
+void sendfunc(const void *data, uint16_t len) {
+    Serial.write((const uint8_t *)data, len);
+}
+// Optional: called for any byte that is NOT part of a petcol packet.
+void on_extra(uint8_t b) { /* e.g. forward plain debug text */ }
+
+petcol link(sendfunc, on_extra);   // delimiter defaults to PETCOL_BYTE (0xAA)
+
+// --- send ---
+uint8_t msg[] = { 1, 'h', 'i' };   // type 1 = LCD text
+link.sendFunc(msg, sizeof(msg));   // frames CRC-32 + length + delimiter and writes it
+
+// --- receive ---
+while (Serial.available()) {
+    packet_recieved *pkt = link.recv_byte_input(Serial.read());
+    if (pkt) {
+        // A full, CRC-validated packet arrived: pkt->data, pkt->length.
+    }
+}
+```
+
+- `sendFunc(data, len)` frames one packet and writes it via `sendfunc`.
+- `recv_byte_input(byte)` is fed every received byte and returns a
+  `packet_recieved*` once a complete, CRC-valid frame is decoded, otherwise
+  `NULL`.
+- `extra_data_callback` (if supplied) receives bytes that are not part of a
+  packet, so a petcol channel can coexist with ordinary serial output.
+- The `recvfunc` field in `pet_TL` is **not** used by this flow; it is a
+  leftover and can be ignored.
+
 ## Frame layout
 
 A packet is sent as:
