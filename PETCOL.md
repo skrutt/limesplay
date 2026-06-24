@@ -41,8 +41,6 @@ while (Serial.available()) {
   `NULL`.
 - `extra_data_callback` (if supplied) receives bytes that are not part of a
   packet, so a petcol channel can coexist with ordinary serial output.
-- The `recvfunc` field in `pet_TL` is **not** used by this flow; it is a
-  leftover and can be ignored.
 
 ## Frame layout
 

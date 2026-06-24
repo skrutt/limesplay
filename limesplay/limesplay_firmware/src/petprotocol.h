@@ -24,13 +24,6 @@ typedef struct {
 #endif
 } packet_recieved;
 
-// Transport for a petcol instance. Only sendfunc is used by the current code;
-// recvfunc is unused (see the receive model note on the class below).
-typedef struct {
-    void(*sendfunc)(const void*, uint16_t size);
-    bool(*recvfunc)(void*);     //Unused: receiving is done by feeding bytes to recv_byte_input().
-} pet_TL;
-
 #define SENDSIZE_MAX PACKETSIZE_MAX + sizeof(packet_header)
 
 // petcol: a self-synchronising framing layer over an arbitrary byte transport.
@@ -51,10 +44,6 @@ typedef struct {
 class petcol
 {
 public:
-    //Construct from a transport struct.
-    //petcol(pet_TL, uint8_t delimiter = PETCOL_BYTE );
-    //recvfunc is currently unused; kept for source compatibility.
-    petcol(void(*sendfunc)(const void*, uint16_t ), bool(*recvfunc)(uint8_t*), uint8_t delimiter = PETCOL_BYTE);
     //Minimal: send only.
     petcol(void(*sendfunc)(const void*, uint16_t ), uint8_t delimiter = PETCOL_BYTE);
     //With a callback for bytes that are not part of a packet.
