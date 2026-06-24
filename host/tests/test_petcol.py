@@ -171,6 +171,25 @@ class FirmwareDecoderTests(unittest.TestCase):
         packets, _ = self._decode(bytes(pkt))
         self.assertEqual(packets, [])
 
+    def test_max_size_packet_with_leading_extra(self):
+        # A near-max payload spans more than a max-size buffer window; the leading
+        # extra must spill out while the whole frame is still recognised.
+        extra = b"extra"* 10                # 50 bytes, no delimiter
+        payload = bytes(range(127))         # max payload (length < PACKETSIZE_MAX)
+        packets, got_extra = self._decode(extra + encode_packet(payload))
+        self.assertEqual(packets, [payload])
+        self.assertEqual(got_extra, extra)
+
+    def test_large_extra_stream_all_delivered_in_order(self):
+        # Lots of non-packet data ahead of a packet: every byte must reach the
+        # extra callback in order (some via the age-out spill, some via the match
+        # flush), and nothing may be dropped.
+        extra = bytes((i * 3 + 1) & 0x7F for i in range(300))  # 300 bytes, no 0xAA
+        payload = b"\x01done"
+        packets, got_extra = self._decode(extra + encode_packet(payload))
+        self.assertEqual(packets, [payload])
+        self.assertEqual(got_extra, extra)
+
 
 if __name__ == "__main__":
     unittest.main()

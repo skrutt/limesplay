@@ -67,6 +67,15 @@ bool petcol::sendFunc(const void * data, uint16_t len)
 // Trailer size on the wire: crc (4) + length (2). The delimiter is not buffered.
 #define PETCOL_TRAILER 6
 
+// Largest frame that can sit in the buffer before its delimiter arrives:
+// the biggest legal payload (PACKETSIZE_MAX - 1) plus the trailer. A byte older
+// than this window can never become part of a future packet, so it is released
+// to the extra-data callback. The ring buffer is sized strictly larger than this
+// so the spill below always fires before the buffer could overwrite anything.
+#define PETCOL_MAX_PENDING ((PACKETSIZE_MAX - 1) + PETCOL_TRAILER)
+static_assert(RECV_BUFSIZE > PETCOL_MAX_PENDING,
+              "recv buffer must hold a full max-size frame without overwriting");
+
 // Recv: buffer the byte; when a delimiter could close a frame, inspect the
 // candidate trailing frame *without* disturbing the buffer and only consume it
 // once the CRC matches. A delimiter that does not complete a valid frame leaves
@@ -124,9 +133,10 @@ packet_recieved *petcol::recv_byte_input(uint8_t byte)
     // Not a frame boundary (or not a valid frame): ordinary data.
     recv_ring_buf.push(byte);
 
-    // Keep the backlog bounded: a byte older than a max-size packet can never be
-    // part of a pending frame, so release it as extra data.
-    if (recv_ring_buf.count() >= PACKETSIZE_MAX)
+    // Keep the backlog bounded: any byte older than the largest possible pending
+    // frame can never become part of a packet, so release it - in arrival order -
+    // to the extra-data callback. Nothing is ever silently dropped.
+    while (recv_ring_buf.count() > PETCOL_MAX_PENDING)
     {
         uint8_t extra = recv_ring_buf.pop();
         if (extra_data_callback)
