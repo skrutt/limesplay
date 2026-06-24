@@ -33,7 +33,9 @@ def py_decode(stream, delimiter=PETCOL_BYTE):
     return packets, bytes(extra)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FIRMWARE = os.path.join(os.path.dirname(os.path.dirname(HERE)), "limesplay_firmware")
+REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
+# petcol now lives in one canonical place, shared by firmware/host/examples.
+PETCOL = os.path.join(REPO_ROOT, "petcol")
 
 
 class _Recorder:
@@ -184,10 +186,10 @@ class FirmwareDecoderTests(unittest.TestCase):
         cls.tmpdir = tempfile.mkdtemp()
         cls.binary = os.path.join(cls.tmpdir, "recv_harness")
         subprocess.check_call([
-            cxx, "-std=c++11", "-O2", "-I", FIRMWARE,
+            cxx, "-std=c++11", "-O2", "-I", PETCOL,
             "-o", cls.binary,
             os.path.join(HERE, "recv_harness.cpp"),
-            os.path.join(FIRMWARE, "petprotocol.cpp"),
+            os.path.join(PETCOL, "petprotocol.cpp"),
         ])
 
     @classmethod

@@ -6,3 +6,13 @@ venv/
 # Arduino / build artifacts
 *.gch
 build/
+
+# Qt / qmake build artifacts
+*.pro.user
+*.o
+moc_*.cpp
+moc_predefs.h
+ui_*.h
+.qmake.stash
+examples/qt-lcd-controller/Makefile
+examples/qt-lcd-controller/petcol_test
