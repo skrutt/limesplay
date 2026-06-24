@@ -19,9 +19,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from petcol import (  # noqa: E402
     PETCOL_BYTE,
     PetcolClient,
+    PetcolDecoder,
     encode_packet,
     petcol_checksum,
 )
+
+
+def py_decode(stream, delimiter=PETCOL_BYTE):
+    """Run the pure-Python decoder, returning (packets, extra_bytes)."""
+    extra = bytearray()
+    decoder = PetcolDecoder(delimiter=delimiter, on_extra=extra.append)
+    packets = decoder.feed(bytes(stream))
+    return packets, bytes(extra)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIRMWARE = os.path.join(os.path.dirname(os.path.dirname(HERE)), "limesplay_firmware")
@@ -76,6 +85,56 @@ class EncodeTests(unittest.TestCase):
         self.assertEqual(text_pkt[0], 1)
         self.assertEqual(text_pkt[1:3], b"hi")
         self.assertEqual(color_pkt[:4], bytes((2, 255, 0, 128)))
+
+
+class PythonDecoderTests(unittest.TestCase):
+    """The pure-Python decoder, independent of any C toolchain."""
+
+    def test_roundtrip_and_extra_in_order(self):
+        extra1 = b"hello "
+        pkt1 = encode_packet(b"\x01Hi")
+        extra2 = b"\x00\xff debug\n"
+        pkt2 = encode_packet(bytes((2, 255, 0, 128)))
+        # payload that itself contains the delimiter byte (false-positive guard)
+        pkt3 = encode_packet(b"\x01" + bytes((PETCOL_BYTE, PETCOL_BYTE, 0x10)))
+
+        packets, extra = py_decode(extra1 + pkt1 + extra2 + pkt2 + pkt3)
+        self.assertEqual(packets, [
+            b"\x01Hi",
+            bytes((2, 255, 0, 128)),
+            b"\x01" + bytes((PETCOL_BYTE, PETCOL_BYTE, 0x10)),
+        ])
+        self.assertEqual(extra, extra1 + extra2)
+
+    def test_custom_delimiter(self):
+        packets, extra = py_decode(
+            b"x" + encode_packet(b"\x01ok", delimiter=0x00), delimiter=0x00)
+        self.assertEqual(packets, [b"\x01ok"])
+        self.assertEqual(extra, b"x")
+
+    def test_corrupt_crc_is_not_decoded(self):
+        pkt = bytearray(encode_packet(b"\x01payload"))
+        pkt[0] ^= 0xFF
+        packets, _ = py_decode(bytes(pkt))
+        self.assertEqual(packets, [])
+
+    def test_max_size_packet_with_leading_extra(self):
+        extra = b"extra" * 10
+        payload = bytes(range(127))
+        packets, got_extra = py_decode(extra + encode_packet(payload))
+        self.assertEqual(packets, [payload])
+        self.assertEqual(got_extra, extra)
+
+    def test_partial_frame_is_buffered_not_emitted(self):
+        # A packet split across two feeds must still decode, and nothing should
+        # leak out as extra before the delimiter arrives.
+        pkt = encode_packet(b"\x01chunked")
+        extra = bytearray()
+        decoder = PetcolDecoder(on_extra=extra.append)
+        self.assertEqual(decoder.feed(pkt[:4]), [])
+        self.assertEqual(extra, b"")
+        self.assertEqual(decoder.feed(pkt[4:]), [b"\x01chunked"])
+        self.assertEqual(bytes(extra), b"")
 
 
 class ChecksumMatchesFirmwareTests(unittest.TestCase):
@@ -189,6 +248,25 @@ class FirmwareDecoderTests(unittest.TestCase):
         packets, got_extra = self._decode(extra + encode_packet(payload))
         self.assertEqual(packets, [payload])
         self.assertEqual(got_extra, extra)
+
+    def test_python_decoder_matches_firmware(self):
+        # The pure-Python decoder must reproduce the firmware decoder byte for
+        # byte (same packets, same extra) across a range of streams.
+        streams = [
+            b"hello " + encode_packet(b"\x01Hi") + b"\x00\xff bye\n"
+            + encode_packet(bytes((2, 1, 2, 3))),
+            encode_packet(b"\x01" + bytes((PETCOL_BYTE, PETCOL_BYTE, 9))),
+            bytearray(encode_packet(b"\x01nope")),  # corrupted below
+            b"extra" * 10 + encode_packet(bytes(range(127))),
+            bytes((i * 3 + 1) & 0x7F for i in range(300)) + encode_packet(b"\x01x"),
+            bytes([PETCOL_BYTE]) * 8 + encode_packet(b"\x01\x01\x01"),
+        ]
+        streams[2][0] ^= 0xFF
+        for stream in streams:
+            fw_packets, fw_extra = self._decode(stream)
+            py_packets, py_extra = py_decode(stream)
+            self.assertEqual(py_packets, fw_packets, "packet mismatch on %r" % bytes(stream))
+            self.assertEqual(py_extra, fw_extra, "extra mismatch on %r" % bytes(stream))
 
 
 if __name__ == "__main__":

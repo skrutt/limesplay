@@ -30,6 +30,13 @@ import zlib
 PETCOL_BYTE = 0xAA
 PACKETSIZE_MAX = 128
 
+# Trailer carried on the wire after the payload: crc (4) + length (2). The
+# delimiter is not buffered by the receiver, so it is not counted here.
+PETCOL_TRAILER = 6
+# Largest frame that can be pending in the receive buffer before its delimiter
+# arrives: the biggest legal payload plus the trailer. Mirrors the firmware.
+PETCOL_MAX_PENDING = (PACKETSIZE_MAX - 1) + PETCOL_TRAILER
+
 MSG_LCD_TEXT = 1
 MSG_LED_COLOR = 2
 
@@ -95,3 +102,77 @@ class PetcolClient:
         """Send a type-2 LED colour message."""
         rgb = bytes((red & 0xFF, green & 0xFF, blue & 0xFF))
         return self.send(bytes((MSG_LED_COLOR,)) + rgb)
+
+
+class PetcolDecoder:
+    """Decodes a petcol byte stream - the host-side mirror of the firmware's
+    ``recv_byte_input``.
+
+    Feed incoming bytes with :meth:`feed`; it returns the list of complete,
+    CRC-validated packets found in that chunk. Every byte that is *not* part of a
+    packet is handed to ``on_extra`` (one byte at a time, in arrival order), so a
+    petcol channel can be separated from other traffic sharing the same stream.
+
+    The algorithm matches the firmware exactly: bytes accumulate in a buffer, and
+    when a byte equals the ``delimiter`` the candidate trailing frame is inspected
+    in place; the frame is only consumed once its CRC checks out. A delimiter that
+    does not complete a valid frame is treated as ordinary data, and any byte too
+    old to still belong to a pending frame is released as extra data, so nothing
+    is ever dropped.
+    """
+
+    def __init__(self, checksum=petcol_checksum, delimiter=PETCOL_BYTE,
+                 on_packet=None, on_extra=None):
+        self._checksum = checksum
+        self._delimiter = delimiter & 0xFF
+        self._on_packet = on_packet
+        self._on_extra = on_extra
+        self._buf = bytearray()
+
+    def feed(self, data):
+        """Feed one byte (``int``) or many (``bytes``); return decoded packets."""
+        if isinstance(data, int):
+            data = (data,)
+        packets = []
+        for byte in data:
+            packet = self._feed_byte(byte & 0xFF)
+            if packet is not None:
+                packets.append(packet)
+        return packets
+
+    def _emit_extra(self, data):
+        if self._on_extra is not None:
+            for byte in data:
+                self._on_extra(byte)
+
+    def _feed_byte(self, byte):
+        buf = self._buf
+        if byte == self._delimiter and len(buf) >= PETCOL_TRAILER:
+            count = len(buf)
+            length = buf[count - 2] | (buf[count - 1] << 8)
+            if 0 < length < PACKETSIZE_MAX and count >= length + PETCOL_TRAILER:
+                crc_pos = count - PETCOL_TRAILER
+                payload_pos = crc_pos - length
+                want_crc = (buf[crc_pos]
+                            | (buf[crc_pos + 1] << 8)
+                            | (buf[crc_pos + 2] << 16)
+                            | (buf[crc_pos + 3] << 24))
+                payload = bytes(buf[payload_pos:payload_pos + length])
+                if self._checksum(payload) == want_crc:
+                    # Bytes before the payload are non-packet data; the frame
+                    # itself (payload + trailer) is consumed.
+                    self._emit_extra(buf[:payload_pos])
+                    self._buf = bytearray()
+                    if self._on_packet is not None:
+                        self._on_packet(payload)
+                    return payload
+
+        # Not a frame boundary (or not a valid frame): ordinary data.
+        buf.append(byte)
+
+        # Release any byte too old to still be part of a pending frame.
+        while len(buf) > PETCOL_MAX_PENDING:
+            self._emit_extra(buf[:1])
+            del buf[0]
+
+        return None
