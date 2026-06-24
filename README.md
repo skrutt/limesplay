@@ -48,8 +48,23 @@ Run `python3 limesplay.py --help` for all options.
 ![petcol frame layout: payload, crc32, length, delimiter](docs/petcol-frame.svg)
 
 The first payload byte is the message type (`1` = LCD text, `2` = LED RGB) and
-the checksum is a standard CRC-32, matching the firmware's `make_CRC`. See
+the checksum is a standard CRC-32, matching the firmware's `make_CRC`. It both
+**encodes** packets (`PetcolClient`) and **decodes** an incoming stream
+(`PetcolDecoder`, the host-side mirror of the firmware's `recv_byte_input`). See
 [PETCOL.md](PETCOL.md) for the full protocol spec.
+
+### Example: live stream splitter
+
+`petcol_split.py` shows the decoder in action: it reads a stream that mixes
+petcol packets with ordinary serial output and splits it live into two panes —
+the non-packet bytes (a plain serial console) on the left, the decoded packets
+on the right. It runs with no hardware via a built-in demo generator:
+
+```sh
+cd host
+python3 petcol_split.py --demo                 # built-in mixed stream, no HW
+python3 petcol_split.py --port /dev/ttyUSB0     # a real board
+```
 
 ## Firmware (Arduino)
 
